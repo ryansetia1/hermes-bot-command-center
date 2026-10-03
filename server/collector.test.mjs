@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createCollector } from './collector.mjs'
 
@@ -335,5 +338,39 @@ describe('local presence collector', () => {
     })
     // Neither is direct
     expect(presence.snapshots['default:direct:atlas']).toBeUndefined()
+  })
+})
+
+describe('GET /hermes-pets', () => {
+  const hermesHome = mkdtempSync(join(tmpdir(), 'hermes-'))
+  mkdirSync(join(hermesHome, 'profiles/elio/pets/ninjacat'), { recursive: true })
+  mkdirSync(join(hermesHome, 'pets/ninjacat'), { recursive: true })
+  writeFileSync(join(hermesHome, 'profiles/elio/pets/ninjacat/spritesheet.webp'), 'sheet')
+  writeFileSync(join(hermesHome, 'profiles/elio/pets/ninjacat/secret.txt'), 'nope')
+  writeFileSync(join(hermesHome, 'pets/ninjacat/pet.json'), '{}')
+  const get = async (path) => {
+    const collector = await startCollector({ hermesHome })
+    return fetch(`${collector.url}${path}`)
+  }
+
+  it('serves a sheet with an image content type, and the default profile from the Hermes root', async () => {
+    const sheet = await get('/hermes-pets/elio/ninjacat/spritesheet.webp')
+    expect(sheet.status).toBe(200)
+    expect(sheet.headers.get('content-type')).toBe('image/webp')
+    expect(await sheet.text()).toBe('sheet')
+    expect((await get('/hermes-pets/default/ninjacat/pet.json')).status).toBe(200)
+  })
+
+  it('rejects traversal, encoded slashes, unknown files and unknown profiles', async () => {
+    const statuses = await Promise.all([
+      '/hermes-pets/..%2Felio/ninjacat/spritesheet.webp',
+      '/hermes-pets/elio/ninja%2Fcat/spritesheet.webp',
+      '/hermes-pets/elio/%2e%2e/spritesheet.webp',
+      '/hermes-pets/elio/ninjacat/secret.txt',
+      '/hermes-pets/elio/ninjacat/spritesheet.webp/extra',
+      '/hermes-pets/nobody/ninjacat/spritesheet.webp',
+      '/hermes-pets/elio/ninjacat/pet.json',
+    ].map(async (path) => (await get(path)).status))
+    expect(statuses).toEqual([400, 400, 400, 400, 400, 404, 404])
   })
 })

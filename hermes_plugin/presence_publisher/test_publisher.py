@@ -88,6 +88,55 @@ class IdentityTests(unittest.TestCase):
             })
 
 
+class HermesPetTests(unittest.TestCase):
+    def setUp(self):
+        reset_room_id()
+        reset_profile()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name) / 'elio'
+        self.home.mkdir()
+        self.env = mock.patch.dict(os.environ, {'HERMES_HOME': str(self.home)}, clear=True)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+
+    def configure(self, slug, sheet='spritesheet.webp'):
+        (self.home / 'config.yaml').write_text(f'display:\n  pet:\n    enabled: false\n    slug: {slug}\n')
+        pet_dir = self.home / 'pets' / slug
+        pet_dir.mkdir(parents=True, exist_ok=True)
+        (pet_dir / sheet).write_bytes(b'sheet')
+        return pet_dir / sheet
+
+    def test_uses_configured_pet_with_mtime_version_even_when_disabled(self):
+        sheet = self.configure('ninjacat')
+        found = identity()['pet']
+        self.assertEqual(found['slug'], 'ninjacat')
+        self.assertEqual(found['url'], '/hermes-pets/elio/ninjacat/spritesheet.webp')
+        self.assertEqual(found['version'], str(sheet.stat().st_mtime_ns))
+
+    def test_changes_are_picked_up_on_the_next_call(self):
+        sheet = self.configure('ninjacat')
+        before = identity()['pet']
+        os.utime(sheet, ns=(1, 1))
+        touched = identity()['pet']
+        self.assertNotEqual(before['version'], touched['version'])
+        self.configure('otter')
+        self.assertEqual(identity()['pet']['url'], '/hermes-pets/elio/otter/spritesheet.webp')
+
+    def test_env_overrides_win(self):
+        self.configure('ninjacat')
+        with mock.patch.dict(os.environ, {'PRESENCE_PET_SLUG': 'x', 'PRESENCE_PET_VERSION': '9', 'PRESENCE_PET_URL': '/pets/x.png'}):
+            self.assertEqual(identity()['pet'], {'slug': 'x', 'version': '9', 'url': '/pets/x.png'})
+
+    def test_missing_or_unsafe_pet_falls_back_to_default(self):
+        default = {'slug': 'elio', 'version': '1.0.0', 'url': '/pets/elio-v1.png'}
+        self.assertEqual(identity()['pet'], default)
+        (self.home / 'config.yaml').write_text('display:\n  pet:\n    slug: ninjacat\n')
+        self.assertEqual(identity()['pet'], default)  # configured but no sheet on disk
+        (self.home / 'config.yaml').write_text('display:\n  pet:\n    slug: ../evil\n')
+        self.assertEqual(identity()['pet'], default)
+
+
 class RoomResolutionTests(unittest.TestCase):
     def setUp(self):
         reset_room_id()
