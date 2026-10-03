@@ -187,6 +187,22 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
     response.writeHead(404).end()
   }
 
+  // GET /hermes-avatars/<profile>/avatar.png: the profile's own avatar image.
+  async function serveAvatar(pathname, response) {
+    const [, , profile, file, ...extra] = pathname.split('/')
+    if (extra.length || file !== 'avatar.png' || !SAFE_SEGMENT.test(profile)) {
+      response.writeHead(400).end()
+      return
+    }
+    const profileHome = profile === 'default' ? hermesHome : join(hermesHome, 'profiles', profile)
+    try {
+      const body = await readFile(join(profileHome, 'assets', file))
+      response.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-cache' }).end(body)
+    } catch {
+      response.writeHead(404).end()
+    }
+  }
+
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1')
     if (request.method === 'GET' && url.pathname === '/presence') {
@@ -196,6 +212,10 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
     }
     if (request.method === 'GET' && url.pathname.startsWith('/hermes-pets/')) {
       await servePet(url.pathname, response)
+      return
+    }
+    if (request.method === 'GET' && url.pathname.startsWith('/hermes-avatars/')) {
+      await serveAvatar(url.pathname, response)
       return
     }
     if (request.method === 'GET' && url.pathname === '/events') {

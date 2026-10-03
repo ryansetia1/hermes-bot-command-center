@@ -126,6 +126,16 @@ class HermesPetTests(unittest.TestCase):
         self.configure('otter')
         self.assertEqual(identity()['pet']['url'], '/hermes-pets/elio/otter/spritesheet.webp')
 
+    def test_disabled_pet_prefers_the_profile_avatar_but_an_enabled_pet_wins(self):
+        sheet = self.configure('ninjacat')
+        avatar = self.home / 'assets' / 'avatar.png'
+        avatar.parent.mkdir()
+        avatar.write_bytes(b'png')
+        found = identity()['pet']
+        self.assertEqual((found['url'], found['version']), ('/hermes-avatars/elio/avatar.png', str(avatar.stat().st_mtime_ns)))
+        (self.home / 'config.yaml').write_text('display:\n  pet:\n    enabled: true\n    slug: ninjacat\n')
+        self.assertEqual(identity()['pet']['url'], '/hermes-pets/elio/ninjacat/spritesheet.webp')
+
     def test_falls_back_to_shared_hermes_pets(self):
         shared = Path(self.tmp.name) / 'shared'
         (shared / '.hermes' / 'pets' / 'ninjacat').mkdir(parents=True)

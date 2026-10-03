@@ -443,27 +443,39 @@ def _profile_home(profile: str) -> Path:
     return root if profile == "default" else root / "profiles" / profile
 
 
+def _configured_pet(home: Path, config: dict, profile: str) -> dict | None:
+    """The sheet of display.pet.slug: the profile's own pets first, then the shared ~/.hermes/pets."""
+    slug = config.get("slug")
+    if not isinstance(slug, str) or not _SAFE_SEGMENT.match(slug):
+        return None
+    sheet = next((f for h in (home, Path.home() / ".hermes") for f in (h / "pets" / slug).glob("spritesheet.*")
+                  if f.suffix in (".webp", ".png")), None)  # formats the collector serves
+    if sheet is None:
+        return None
+    return {"slug": slug, "version": str(sheet.stat().st_mtime_ns), "url": f"/hermes-pets/{profile}/{slug}/{sheet.name}"}
+
+
 def _hermes_pet(profile: str) -> dict | None:
-    """The pet configured in the profile's Hermes config, or None. Read on every event, never cached."""
+    """The sprite Hermes shows for this profile, or None. Read on every event, never cached.
+
+    An enabled desktop pet wins; otherwise the profile's own avatar (distinct per bot); otherwise a
+    configured-but-disabled pet sheet."""
     try:
         if not _SAFE_SEGMENT.match(profile):
             return None
         home = _profile_home(profile)
-        import yaml
-        config = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {}
-        slug = config["display"]["pet"]["slug"]
-        if not isinstance(slug, str) or not _SAFE_SEGMENT.match(slug):
-            return None
-        # The profile's own pets first, then the shared ~/.hermes/pets (where the desktop app keeps most pets).
-        sheet = next((f for h in (home, Path.home() / ".hermes") for f in (h / "pets" / slug).glob("spritesheet.*")
-                      if f.suffix in (".webp", ".png")), None)  # formats the collector serves
-        if sheet is None:
-            return None
-        return {
-            "slug": slug,
-            "version": str(sheet.stat().st_mtime_ns),
-            "url": f"/hermes-pets/{profile}/{slug}/{sheet.name}",
-        }
+        try:
+            import yaml
+            config = (yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {})["display"]["pet"]
+        except Exception:
+            config = {}
+        pet = _configured_pet(home, config, profile)
+        if pet and config.get("enabled") is True:
+            return pet
+        avatar = home / "assets" / "avatar.png"
+        if avatar.is_file():
+            return {"slug": f"{profile}-avatar", "version": str(avatar.stat().st_mtime_ns), "url": f"/hermes-avatars/{profile}/avatar.png"}
+        return pet
     except Exception:
         return None
 
