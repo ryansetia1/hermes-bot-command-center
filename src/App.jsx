@@ -144,7 +144,7 @@ const clockTime = (at) => (Number.isFinite(at) ? new Date(at).toLocaleTimeString
 
 // Read-only room history; every value renders as a text node (React escapes it), never as HTML.
 function RoomSidebar({ roomId }) {
-  const { messages, failed } = useRoomMessages(roomId, true)
+  const { messages, failed } = useRoomMessages(roomId)
   const listRef = useRef(null)
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
@@ -152,8 +152,8 @@ function RoomSidebar({ roomId }) {
   return (
     <aside className="room-sidebar" id={`room-sidebar-${roomId}`} aria-label="Room messages">
       <ol className="room-log" ref={listRef} tabIndex={0} aria-label="Messages, oldest first">
-        {messages.map((message) => (
-          <li key={message.id} className={`log-entry log-${message.from.kind}`}>
+        {messages.map((message, index) => (
+          <li key={`${index}:${message.id}`} className={`log-entry log-${message.from.kind}`}>
             <span className="log-head"><strong>{message.from.name || message.from.kind || 'unknown'}</strong> <time>{clockTime(message.at)}</time></span>
             <span className="log-text">{message.text}</span>
           </li>

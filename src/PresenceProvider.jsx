@@ -31,21 +31,20 @@ export function useRoster() {
   return roster
 }
 
-// Room chat history from the read-only collector endpoint, polled only while the sidebar is open.
+// Room chat history from the read-only collector endpoint; the caller mounts it only while the sidebar is open.
 const MESSAGES_POLL_MS = 4_000
-export function useRoomMessages(roomId, enabled) {
+export function useRoomMessages(roomId) {
   const [state, setState] = useState({ roomId: null, messages: [], failed: false })
   useEffect(() => {
-    if (!enabled) return undefined
     let active = true
     const load = () => fetch(`/rooms/${encodeURIComponent(roomId)}/messages?limit=100`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error('History unavailable')))
       .then((data) => active && setState({ roomId, messages: data.messages, failed: false }))
-      .catch(() => active && setState({ roomId, messages: [], failed: true }))
+      .catch(() => active && setState((prev) => ({ roomId, messages: prev.roomId === roomId ? prev.messages : [], failed: true })))
     load()
     const timer = setInterval(load, MESSAGES_POLL_MS)
     return () => { active = false; clearInterval(timer) }
-  }, [roomId, enabled])
+  }, [roomId])
   return state.roomId === roomId ? state : { roomId, messages: [], failed: false }
 }
 
