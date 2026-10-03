@@ -33,14 +33,40 @@ async function readProfile(file) {
   } catch { return {} } // missing/unreadable/bad YAML: never log contents
 }
 
+function liveRooms(root) {
+  const groups = root.ui_meta?.['hermes-bots-groups']
+  const deleted = isObject(groups?.deleted) ? groups.deleted : {}
+  return Object.entries(isObject(groups?.rooms) ? groups.rooms : {})
+    .filter(([key, room]) => isObject(room) && isText(room.roomId) && !(key in deleted) && !(`id:${room.roomId}` in deleted))
+    .map(([, room]) => room)
+}
+
+const MESSAGE_LIMIT = { default: 50, max: 200 }
+const MAX_TEXT = 2_000
+const MAX_NAME = 80
+// Plain strings only: control characters (except newline/tab) are dropped, length is capped.
+const plain = (value, max) => (typeof value === 'string' ? value : '').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, max)
+
+// Read-only room history for the sidebar; the Hermes desktop app owns profile.yaml, so this never writes.
+async function readRoomMessages(hermesHome, roomId, limit) {
+  const root = await readProfile(join(hermesHome, 'profile.yaml'))
+  const room = liveRooms(root).find((candidate) => candidate.roomId === roomId)
+  if (!room) return null
+  const log = Array.isArray(room.log) ? room.log : []
+  return log.filter(isObject).slice(-limit).map((entry) => ({
+    id: plain(String(entry.id ?? ''), MAX_NAME),
+    from: { kind: plain(entry.from?.kind, MAX_NAME), name: plain(entry.from?.name, MAX_NAME) },
+    text: plain(entry.text, MAX_TEXT),
+    at: Number.isFinite(entry.at) ? entry.at : null,
+    thread: entry.thread == null ? null : plain(String(entry.thread), MAX_NAME),
+  }))
+}
+
 // Read-only Hermes roster: group rooms from the root profile.yaml plus one bot per profile directory.
 async function readRoster(hermesHome) {
   const root = await readProfile(join(hermesHome, 'profile.yaml'))
-  const groups = root.ui_meta?.['hermes-bots-groups']
-  const deleted = isObject(groups?.deleted) ? groups.deleted : {}
-  const rooms = Object.entries(isObject(groups?.rooms) ? groups.rooms : {})
-    .filter(([key, room]) => isObject(room) && isText(room.roomId) && !(key in deleted) && !(`id:${room.roomId}` in deleted))
-    .map(([, room]) => ({
+  const rooms = liveRooms(root)
+    .map((room) => ({
       roomId: room.roomId,
       name: isText(room.name) ? room.name : room.roomId,
       members: (Array.isArray(room.members) ? room.members : []).map((member) => member?.handle).filter((handle) => SAFE_SEGMENT.test(handle)),
@@ -256,6 +282,23 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
     if (request.method === 'GET' && url.pathname === '/roster') {
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
       response.end(JSON.stringify(await readRoster(hermesHome)))
+      return
+    }
+    if (request.method === 'GET' && url.pathname.startsWith('/rooms/')) {
+      const [, , roomId, leaf, ...extra] = url.pathname.split('/')
+      const requested = Number.parseInt(url.searchParams.get('limit'), 10)
+      const limit = Math.min(Number.isInteger(requested) && requested > 0 ? requested : MESSAGE_LIMIT.default, MESSAGE_LIMIT.max)
+      if (extra.length || leaf !== 'messages' || !SAFE_SEGMENT.test(roomId)) {
+        response.writeHead(400).end()
+        return
+      }
+      const messages = await readRoomMessages(hermesHome, roomId, limit)
+      if (!messages) {
+        response.writeHead(404).end()
+        return
+      }
+      response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+      response.end(JSON.stringify({ roomId, messages }))
       return
     }
     if (request.method === 'GET' && url.pathname.startsWith('/hermes-pets/')) {

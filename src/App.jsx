@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { usePresence, useRoster } from './PresenceProvider.jsx'
+import { usePresence, useRoomMessages, useRoster } from './PresenceProvider.jsx'
 import { DIRECT_ROOM_ID, deriveRooms, mergeRoster } from './rooms.js'
 import { isUnread, useReadMarks } from './readMarks.js'
 import { isSheet, petSrc, sheetRow } from './petSprite.js'
@@ -141,6 +141,30 @@ function Sprite({ bot, spot, unread, onSelect }) {
   )
 }
 
+const clockTime = (at) => (Number.isFinite(at) ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')
+
+// Read-only room history; every value renders as a text node (React escapes it), never as HTML.
+function RoomSidebar({ roomId }) {
+  const { messages, failed } = useRoomMessages(roomId)
+  const listRef = useRef(null)
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
+  }, [messages.length])
+  return (
+    <aside className="room-sidebar" id={`room-sidebar-${roomId}`} aria-label="Room messages">
+      <ol className="room-log" ref={listRef} tabIndex={0} aria-label="Messages, oldest first">
+        {messages.map((message, index) => (
+          <li key={`${index}:${message.id}`} className={message.from.kind === 'user' ? 'log-entry log-user' : 'log-entry'}>
+            <span className="log-head"><strong>{message.from.name || message.from.kind || 'unknown'}</strong> <time>{clockTime(message.at)}</time></span>
+            <span className="log-text">{message.text}</span>
+          </li>
+        ))}
+      </ol>
+      {messages.length === 0 && <p className="intro">{failed ? 'No history available for this room.' : 'No messages yet.'}</p>}
+    </aside>
+  )
+}
+
 function Dialog({ bot, onClose }) {
   const status = stateCopy[bot.state] || stateCopy.unobserved
   const closeRef = useRef(null)
@@ -162,12 +186,16 @@ function Dialog({ bot, onClose }) {
       </div>
       <p className="vn-text">{bot.message ?? `No message yet. ${bot.activity ?? ''}`}</p>
       {bot.message && bot.reason && <p className="vn-age">{bot.reason}</p>}
+      {/* ponytail: sending is disabled; no supported route into a Hermes group room exists (see issue #18 spike). */}
+      <textarea className="vn-input" disabled rows={1} aria-label={`Message ${bot.botId}`} aria-describedby="vn-send-note" placeholder="Sending is not available yet" />
+      <p className="vn-age" id="vn-send-note">Read-only: Hermes has no supported way to post into a group room from outside the desktop app.</p>
     </div>
   )
 }
 
 function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissRoom }) {
   const [openKey, setOpenKey] = useState(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const floorRef = useRef(null)
   const openKeyRef = useRef(null)
   openKeyRef.current = openKey ?? openKeyRef.current
@@ -201,6 +229,17 @@ function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissRoom })
           <h2 id={`room-title-${roomId}`}>{displayName}</h2>
           <span className="room-total-badge">{bots.length} {bots.length === 1 ? 'bot' : 'bots'}</span>
         </div>
+        {roomId !== DIRECT_ROOM_ID && (
+          <button
+            type="button"
+            className="btn-room-clear"
+            aria-expanded={sidebarOpen}
+            aria-controls={`room-sidebar-${roomId}`}
+            onClick={() => setSidebarOpen((open) => !open)}
+          >
+            {sidebarOpen ? 'Hide messages' : 'Show messages'}
+          </button>
+        )}
         {onDismissRoom && (
           <button
             type="button"
@@ -212,6 +251,7 @@ function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissRoom })
           </button>
         )}
       </div>
+      <div className={`room-body${sidebarOpen ? ' with-sidebar' : ''}`}>
       <div className="scene-floor" ref={floorRef}>
         {openBot && <div className="vn-backdrop" onClick={closeDialog} />}
         {sortedBots.map((bot, i) => (
@@ -226,6 +266,8 @@ function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissRoom })
         {openBot && (
           <Dialog bot={openBot} onClose={closeDialog} />
         )}
+      </div>
+      {sidebarOpen && <RoomSidebar roomId={roomId} />}
       </div>
     </section>
   )

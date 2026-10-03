@@ -460,3 +460,40 @@ describe('GET /roster', () => {
     }
   })
 })
+
+describe('GET /rooms/<roomId>/messages', () => {
+  const home = mkdtempSync(join(tmpdir(), 'hermes-messages-'))
+  const log = Array.from({ length: 300 }, (_, index) => ({ id: `m${index}`, from: { kind: index % 2 ? 'user' : 'member', name: index % 2 ? 'me' : 'atlas', source: 'This device' }, text: `line ${index}\nsecond`, at: 1_000 + index, thread: 't1' }))
+  log.push({ id: 'xss', from: { kind: 'member', name: 'iris' }, text: `<img src=x onerror=alert(1)>\u0007${'x'.repeat(5_000)}`, at: 9_999 })
+  writeFileSync(join(home, 'profile.yaml'), JSON.stringify({ ui_meta: { 'hermes-bots-groups': {
+    rooms: { 'id:r1': { roomId: 'r1', name: 'Build', members: [], log }, 'id:r2': { roomId: 'r2', log: [{ id: 'a', text: 'gone' }] } },
+    deleted: { 'id:r2': 1 },
+  } } }))
+  const get = async (path) => fetch(`${(await startCollector({ hermesHome: home })).url}${path}`)
+
+  it('returns the newest capped messages in order as plain strings', async () => {
+    const body = await (await get('/rooms/r1/messages?limit=3')).json()
+    expect(body.messages.map((message) => message.id)).toEqual(['m298', 'm299', 'xss'])
+    const xss = body.messages.at(-1)
+    expect(xss.text.startsWith('<img src=x onerror=alert(1)>x')).toBe(true)
+    expect(xss.text).not.toContain('\u0007')
+    expect(xss.text.length).toBe(2_000)
+    expect(body.messages[0]).toEqual({ id: 'm298', from: { kind: 'member', name: 'atlas' }, text: 'line 298\nsecond', at: 1_298, thread: 't1' })
+  })
+
+  it('caps limit at 200 and falls back to the default for bad values', async () => {
+    expect((await (await get('/rooms/r1/messages?limit=99999')).json()).messages).toHaveLength(200)
+    for (const bad of ['', '?limit=abc', '?limit=-5']) {
+      expect((await (await get(`/rooms/r1/messages${bad}`)).json()).messages).toHaveLength(50)
+    }
+  })
+
+  it('rejects traversal, encoded slashes and extra segments; 404s unknown or deleted rooms', async () => {
+    for (const path of ['/rooms/..%2Fx/messages', '/rooms/a%2Fb/messages', '/rooms/r1/messages/extra', '/rooms/r1/other', '/rooms//messages', '/rooms/%00/messages']) {
+      expect((await get(path)).status, path).toBe(400)
+    }
+    expect((await get('/rooms/%2e%2e/messages')).status).toBe(404) // the client normalizes dot segments away from /rooms/
+    expect((await get('/rooms/nope/messages')).status).toBe(404)
+    expect((await get('/rooms/r2/messages')).status).toBe(404)
+  })
+})
