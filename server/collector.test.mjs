@@ -40,20 +40,23 @@ describe('local presence collector', () => {
     stream.abort()
   })
 
-  it('reports unobserved after the native publisher stops sending observations', async () => {
-    let now = new Date('2026-10-03T10:00:00.000Z')
-    const collector = await startCollector({ now: () => now })
+  it('broadcasts unobserved over SSE when native observations expire', async () => {
+    const collector = await startCollector({ ttlMs: 10 })
+    const controller = new AbortController()
+    const response = await fetch(`${collector.url}/events`, { signal: controller.signal })
+    const reader = response.body.getReader()
+
     await fetch(`${collector.url}/observe`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ source: 'llm', type: 'started', at: now.toISOString() }),
+      body: JSON.stringify({ source: 'llm', type: 'started' }),
     })
-    now = new Date('2026-10-03T10:00:30.001Z')
+    const working = new TextDecoder().decode((await reader.read()).value)
+    const unobserved = new TextDecoder().decode((await reader.read()).value)
 
-    const response = await fetch(`${collector.url}/presence`)
-    await expect(response.json()).resolves.toMatchObject({
-      version: 'presence.v1', state: 'unobserved',
-      reason: 'No native lifecycle event received within 30 seconds.',
-    })
+    expect(working).toContain('"state":"working"')
+    expect(unobserved).toContain('"state":"unobserved"')
+    expect(unobserved).toContain('"reason":"No native lifecycle event received within 0.01 seconds."')
+    controller.abort()
   })
 })

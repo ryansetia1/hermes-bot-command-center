@@ -20,7 +20,7 @@ def event_for_hook(hook_name: str, **kwargs):
     mapping = {
         "pre_gateway_dispatch": ("gateway", "received"),
         "pre_llm_call": ("llm", "started"),
-        "post_llm_call": ("llm", "speaking"),
+        "post_llm_call": ("llm", "completed"),
         "pre_tool_call": ("tool", "started"),
     }
     if hook_name == "post_tool_call":
@@ -38,7 +38,7 @@ def _activity(hook_name: str, kwargs: dict) -> str | None:
     if hook_name == "pre_llm_call":
         return "Processing a request"
     if hook_name == "post_llm_call":
-        return "Sending result"
+        return "Completed response"
     return None
 
 

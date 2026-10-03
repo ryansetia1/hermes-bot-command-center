@@ -4,6 +4,7 @@ const stateForEvent = {
   'gateway:received': 'working',
   'llm:started': 'working',
   'llm:speaking': 'speaking',
+  'llm:completed': 'idle',
   'tool:started': 'working',
   'tool:completed': 'idle',
   'tool:failed': 'error',

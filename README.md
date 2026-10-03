@@ -26,7 +26,7 @@ Vite mem-proxy `/presence` dan `/events` ke collector loopback pada port `8787`;
 
 ## Hubungkan ke Hermes
 
-Plugin memakai hook native `pre_gateway_dispatch`, `pre_llm_call`, `post_llm_call`, `pre_tool_call`, dan `post_tool_call`. Ia mengirim event kecil ke collector melalui `PRESENCE_COLLECTOR_URL` (default `http://127.0.0.1:8787/observe`), tanpa menahan turn jika collector mati.
+Plugin memakai hook native `pre_gateway_dispatch`, `pre_llm_call`, `post_llm_call`, `pre_tool_call`, dan `post_tool_call`. `post_llm_call` dipetakan ke `llm:completed`/`idle`, bukan `speaking`, karena hook itu berjalan pada finalisasi turn; state `speaking` hanya boleh diterbitkan oleh hook streaming yang benar-benar tersedia. Ia mengirim event kecil ke collector melalui `PRESENCE_COLLECTOR_URL` (default `http://127.0.0.1:8787/observe`), tanpa menahan turn jika collector mati.
 
 Salin direktori plugin ke root plugin profil Hermes yang aktif, lalu validasi sebelum me-restart session Hermes:
 
