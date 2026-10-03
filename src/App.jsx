@@ -42,73 +42,6 @@ function Pet({ pet, botId }) {
   )
 }
 
-function BotCard({ bot, onDismiss }) {
-  const status = stateCopy[bot.state] || stateCopy.unobserved
-  const stateIcon = bot.state === 'unobserved' ? '?' : '●'
-  const key = `${bot.hostId}:${bot.roomId}:${bot.botId}`
-
-  return (
-    <article className="bot-card" aria-labelledby={`bot-${bot.botId}`}>
-      <div className="card-top">
-        <div className="card-top-left">
-          <span className="contract">{bot.version || 'presence.v1'}</span>
-          <span className="host">{bot.hostId}</span>
-        </div>
-        {onDismiss && (
-          <button
-            type="button"
-            className="btn-card-dismiss"
-            onClick={() => onDismiss(key)}
-            title="Dismiss bot"
-            aria-label={`Dismiss ${bot.botId}`}
-          >
-            ×
-          </button>
-        )}
-      </div>
-
-      <div className="profile">
-        <Pet pet={bot.pet} botId={bot.botId} />
-        <div>
-          <p className="kicker">BOT IDENTITY</p>
-          <h3 id={`bot-${bot.botId}`}>{bot.botId}</h3>
-          <p className="room">{bot.roomName ? bot.roomName : `#${bot.roomId}`}</p>
-        </div>
-      </div>
-
-      <div className={`state ${status.tone}`}>
-        <span className="state-icon" aria-hidden="true">{stateIcon}</span>
-        <div>
-          <strong>{status.label}</strong>
-          <span>{status.description}</span>
-        </div>
-      </div>
-
-      <dl>
-        <div>
-          <dt>Last activity</dt>
-          <dd>{bot.activity ?? '—'}</dd>
-        </div>
-        <div>
-          <dt>Telemetry</dt>
-          <dd>{secondsAgo(bot.updatedAt)}</dd>
-        </div>
-        {bot.reason && (
-          <div className="reason">
-            <dt>Why unobserved</dt>
-            <dd>{bot.reason}</dd>
-          </div>
-        )}
-      </dl>
-
-      <footer>
-        <span>pet/{bot.pet?.slug || 'unknown'}</span>
-        <span>v{bot.pet?.version || '1.0.0'}</span>
-      </footer>
-    </article>
-  )
-}
-
 const PILL_STATES = ['speaking', 'working', 'idle', 'error', 'unobserved']
 
 function RoomTile({ room, onOpen }) {
@@ -147,76 +80,65 @@ function LobbySection({ title, rooms, onOpen, emptyText }) {
   )
 }
 
-function RoomSection({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
-  // Sort bots: speaking first, working second, then error, idle, and unobserved
+function Sprite({ bot, onDismiss }) {
+  const status = stateCopy[bot.state] || stateCopy.unobserved
+  const key = `${bot.hostId}:${bot.roomId}:${bot.botId}`
+  return (
+    <article className={`sprite ${status.tone}`} aria-label={`${bot.botId}: ${status.label}`}>
+      {onDismiss && (
+        <button
+          type="button"
+          className="btn-card-dismiss"
+          onClick={() => onDismiss(key)}
+          title="Dismiss bot"
+          aria-label={`Dismiss ${bot.botId}`}
+        >
+          ×
+        </button>
+      )}
+      <p className="sprite-bubble">{bot.activity ?? '…'}</p>
+      <div className="sprite-body">
+        <Pet pet={bot.pet} botId={bot.botId} />
+      </div>
+      <h3 className="sprite-name">{bot.botId}</h3>
+      <span className={`pill pill-${status.tone}`}>{status.label}</span>
+      <p className="sprite-age">{secondsAgo(bot.updatedAt)}</p>
+      {bot.reason && <p className="sprite-age">{bot.reason}</p>}
+    </article>
+  )
+}
+
+function RoomScene({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
   const sortedBots = [...bots].sort((a, b) => {
     const prioA = STATE_PRIORITY[a.state] ?? 99
     const prioB = STATE_PRIORITY[b.state] ?? 99
     if (prioA !== prioB) return prioA - prioB
-    const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0
-    const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0
-    if (timeA !== timeB) return timeB - timeA
     return (a.botId || '').localeCompare(b.botId || '')
   })
-
-  const counts = {
-    speaking: bots.filter((b) => b.state === 'speaking').length,
-    working: bots.filter((b) => b.state === 'working').length,
-    idle: bots.filter((b) => b.state === 'idle').length,
-    error: bots.filter((b) => b.state === 'error').length,
-    unobserved: bots.filter((b) => b.state === 'unobserved').length,
-  }
-
-  const displayName = roomName || bots[0]?.roomName || (roomId === DIRECT_ROOM_ID ? '1o1 room' : roomId)
-  const isCustomName = Boolean(displayName && displayName !== roomId && displayName !== `#${roomId}`)
+  const displayName = roomName || (roomId === DIRECT_ROOM_ID ? '1o1 room' : roomId)
 
   return (
-    <section className="room-section" aria-labelledby={`room-title-${roomId}`}>
+    <section className="room-scene" aria-labelledby={`room-title-${roomId}`}>
       <div className="room-summary">
         <div className="room-meta">
-          <p className="kicker">ROOM</p>
+          <p className="kicker">{roomId === DIRECT_ROOM_ID ? '1O1 ROOM' : 'ROOM'}</p>
           <h2 id={`room-title-${roomId}`}>{displayName}</h2>
-          {isCustomName && (
-            <span className="room-id-badge" title={`Identity key: ${roomId}`}>#{roomId}</span>
-          )}
           <span className="room-total-badge">{bots.length} {bots.length === 1 ? 'bot' : 'bots'}</span>
         </div>
-        <div className="room-pills">
-          {counts.speaking > 0 && (
-            <span className="pill pill-speaking">{counts.speaking} speaking</span>
-          )}
-          {counts.working > 0 && (
-            <span className="pill pill-working">{counts.working} working</span>
-          )}
-          {counts.idle > 0 && (
-            <span className="pill pill-idle">{counts.idle} idle</span>
-          )}
-          {counts.error > 0 && (
-            <span className="pill pill-error">{counts.error} error</span>
-          )}
-          {counts.unobserved > 0 && (
-            <span className="pill pill-unobserved">{counts.unobserved} unobserved</span>
-          )}
-          {onDismissRoom && (
-            <button
-              type="button"
-              className="btn-room-clear"
-              onClick={() => onDismissRoom(roomId)}
-              title={`Clear all bots in ${displayName}`}
-            >
-              Clear Room
-            </button>
-          )}
-        </div>
+        {onDismissRoom && (
+          <button
+            type="button"
+            className="btn-room-clear"
+            onClick={() => onDismissRoom(roomId)}
+            title={`Clear all bots in ${displayName}`}
+          >
+            Clear Room
+          </button>
+        )}
       </div>
-
-      <div className="bot-grid">
+      <div className="scene-floor">
         {sortedBots.map((bot) => (
-          <BotCard
-            key={`${bot.hostId}:${bot.roomId}:${bot.botId}`}
-            bot={bot}
-            onDismiss={onDismissBot}
-          />
+          <Sprite key={`${bot.hostId}:${bot.roomId}:${bot.botId}`} bot={bot} onDismiss={onDismissBot} />
         ))}
       </div>
     </section>
@@ -348,7 +270,7 @@ export default function App() {
           <button type="button" className="btn-back" onClick={() => setSelected(null)}>
             ← Back to lobby
           </button>
-          <RoomSection
+          <RoomScene
             roomId={selectedRoom.roomId}
             roomName={selectedRoom.roomName}
             bots={selectedRoom.bots}
