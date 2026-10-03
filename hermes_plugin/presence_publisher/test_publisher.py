@@ -88,6 +88,29 @@ class IdentityTests(unittest.TestCase):
             })
 
 
+class MessageTests(unittest.TestCase):
+    def setUp(self):
+        reset_room_id()
+        reset_profile()
+        self.addCleanup(reset_room_id)
+        self.addCleanup(reset_profile)
+
+    def enqueued(self, hook_name, **kwargs):
+        with mock.patch.dict(os.environ, {'HERMES_HOME': '/Users/x/.hermes/profiles/elio'}, clear=True), \
+                mock.patch.object(publisher, '_QUEUE') as queue:
+            publisher._enqueue(hook_name, **kwargs)
+        return queue.put_nowait.call_args[0][0]
+
+    def test_post_llm_call_carries_capped_assistant_response(self):
+        self.assertEqual(self.enqueued('post_llm_call', assistant_response='hi')['message'], 'hi')
+        self.assertEqual(len(self.enqueued('post_llm_call', assistant_response='x' * 5000)['message']), 2000)
+
+    def test_other_hooks_and_empty_responses_carry_no_message(self):
+        self.assertNotIn('message', self.enqueued('pre_llm_call', assistant_response='hi'))
+        self.assertNotIn('message', self.enqueued('post_llm_call', assistant_response='  '))
+        self.assertNotIn('message', self.enqueued('post_llm_call', assistant_response=None))
+
+
 class HermesPetTests(unittest.TestCase):
     def setUp(self):
         reset_room_id()

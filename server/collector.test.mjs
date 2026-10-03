@@ -374,3 +374,32 @@ describe('GET /hermes-pets', () => {
     expect(statuses).toEqual([400, 400, 400, 400, 400, 404, 404])
   })
 })
+
+describe('optional message', () => {
+  const event = { ...identity, source: 'llm', type: 'completed' }
+  const entityOf = async (collector) => (await (await fetch(`${collector.url}/presence`)).json()).entities[0]
+
+  it('exposes message with messageAt and keeps it across later events without one', async () => {
+    const collector = await startCollector()
+    const messageAt = new Date(Date.now() - 2_000).toISOString()
+    await observe(collector, { ...event, message: 'Hello\nworld', at: messageAt })
+    await observe(collector, { ...identity, source: 'tool', type: 'started', at: new Date().toISOString() })
+    expect(await entityOf(collector)).toMatchObject({ message: 'Hello\nworld', messageAt, state: 'working' })
+  })
+
+  it('ignores non-string messages and omits the fields until a message arrives', async () => {
+    const collector = await startCollector()
+    await observe(collector, { ...event, message: { evil: true } })
+    const entity = await entityOf(collector)
+    expect(entity).not.toHaveProperty('message')
+    expect(entity).not.toHaveProperty('messageAt')
+  })
+
+  it('keeps the last message on the unobserved snapshot', async () => {
+    let clock = new Date('2026-01-01T00:00:00Z')
+    const collector = await startCollector({ ttlMs: 1_000, now: () => clock })
+    await observe(collector, { ...event, message: 'last words' })
+    clock = new Date('2026-01-01T00:01:00Z')
+    expect(await entityOf(collector)).toMatchObject({ state: 'unobserved', message: 'last words' })
+  })
+})

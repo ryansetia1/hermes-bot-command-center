@@ -11,6 +11,7 @@ Identity sent with every event (presence.v1), defaults derived from the active p
   PRESENCE_PET_VERSION default: spritesheet mtime of that Hermes pet, else 1.0.0
   PRESENCE_PET_URL     default: /hermes-pets/<profile>/<slug>/<sheet> served by the collector,
                        else /pets/<pet slug>-v1.png
+Optional `message` (post_llm_call assistant_response, max 2000 chars) is sent with the event.
 The publisher is observer-only and fail-open: a stopped dashboard cannot interrupt Hermes.
 """
 from __future__ import annotations
@@ -28,6 +29,7 @@ from urllib.request import Request, urlopen
 
 _ENDPOINT = os.getenv("PRESENCE_COLLECTOR_URL", "http://127.0.0.1:8787/observe")
 _QUEUE: Queue[dict] = Queue(maxsize=128)
+_MESSAGE_LIMIT = 2000
 _CURRENT_ROOM_ID: str = "direct"
 _CURRENT_ROOM_NAME: str = "Direct"
 _CURRENT_PROFILE: str | None = None
@@ -615,6 +617,9 @@ def _enqueue(hook_name: str, **kwargs) -> None:
     activity = _activity(hook_name, kwargs)
     if activity:
         event["activity"] = activity
+    response = kwargs.get("assistant_response")
+    if hook_name == "post_llm_call" and isinstance(response, str) and response.strip():
+        event["message"] = response[:_MESSAGE_LIMIT]  # local-only chat text: capped, never logged
     try:
         _QUEUE.put_nowait(event)
     except Full:
