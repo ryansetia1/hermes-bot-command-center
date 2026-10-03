@@ -713,7 +713,7 @@ footer {
 
 .vn-portrait {
   position: absolute;
-  bottom: 4px;
+  top: -90px; /* pinned to the top-left corner, overflowing above the box */
   left: 16px;
   display: flex;
 }
