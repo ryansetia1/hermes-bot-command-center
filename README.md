@@ -10,7 +10,7 @@ Hermes native hooks → presence-publisher plugin → HTTP POST /observe
 Vite card ← SSE /events ← local collector ← TTL → unobserved
 ```
 
-Kontrak `presence.v1`: `hostId`, `roomId`, `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, serta `reason` saat tidak teramati. Identitas (`hostId`, `roomId`, `botId`, `pet`) **dikirim publisher di setiap event** dari profile Hermes yang aktif; collector memvalidasinya (event tanpa identitas lengkap ditolak `400`) dan tidak punya identitas default. Sebelum event pertama, `/presence` mengembalikan `unobserved` dengan identitas `null`. Lingkup MVP tetap satu bot: identitas event terakhir yang ditampilkan.
+Kontrak `presence.v1`: `hostId`, `roomId`, `roomName` (opsional, label tampilan), `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, serta `reason` saat tidak teramati. Identitas (`hostId`, `roomId`, `botId`, `pet`) **dikirim publisher di setiap event** dari profile Hermes yang aktif; collector memvalidasinya (event tanpa identitas lengkap ditolak `400`) dan tidak punya identitas default. Sebelum event pertama, `/presence` mengembalikan `unobserved` dengan identitas `null`. Lingkup MVP tetap satu bot: identitas event terakhir yang ditampilkan.
 
 ## Jalankan
 

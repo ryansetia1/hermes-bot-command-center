@@ -82,6 +82,7 @@ class IdentityTests(unittest.TestCase):
             self.assertEqual(identity(), {
                 'hostId': 'studio-mini-7',
                 'roomId': 'night-shift',
+                'roomName': 'night-shift',
                 'botId': 'atlas-the-conductor',
                 'pet': {'slug': 'orion', 'version': '2.3.4', 'url': '/pets/custom.png'},
             })
@@ -308,6 +309,160 @@ class PublishTests(unittest.TestCase):
         with mock.patch.object(publisher, '_ENDPOINT', 'http://127.0.0.1:9/observe'):
             publisher.publish('pre_llm_call')
             publisher._QUEUE.join()
+
+
+class HostedRoomRegressionTests(unittest.TestCase):
+    def setUp(self):
+        reset_room_id()
+        reset_profile()
+
+    def tearDown(self):
+        reset_room_id()
+        reset_profile()
+
+    def test_on_room_member_activity_publishes_distinct_group_rooms_and_names(self):
+        received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                received.append(json.loads(self.rfile.read(int(self.headers['content-length']))))
+                self.send_response(202)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(('127.0.0.1', 0), Handler)
+        Thread(target=server.serve_forever, daemon=True).start()
+
+        sample_manifest = {
+            'ui_meta': {
+                'hermes-bots-groups': {
+                    'rooms': {
+                        'id:rmus2m5md-3tf50': {'id': 'rmus2m5md-3tf50', 'roomId': 'rmus2m5md-3tf50', 'name': 'Build Room'},
+                        'id:rmus2oxfj-ld8kb': {'id': 'rmus2oxfj-ld8kb', 'roomId': 'rmus2oxfj-ld8kb', 'name': 'War Room'},
+                    }
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_yaml = Path(tmpdir) / 'profile.yaml'
+            profile_yaml.write_text(json.dumps(sample_manifest), encoding='utf-8')
+
+            with mock.patch.dict(os.environ, {'HERMES_HOME': tmpdir}, clear=True), \
+                    mock.patch.object(publisher, '_ENDPOINT', f'http://127.0.0.1:{server.server_port}/observe'):
+
+                # 1. Member activity from Build Room
+                publisher.publish(
+                    'on_room_member_activity',
+                    room_id='rmus2m5md-3tf50',
+                    member_id='atlas-the-conductor',
+                    turn_id='turn-1',
+                    kind='tool.started',
+                    payload={'tool': 'code_search'},
+                )
+
+                # 2. Member activity from War Room
+                publisher.publish(
+                    'on_room_member_activity',
+                    room_id='rmus2oxfj-ld8kb',
+                    member_id='mira-the-operator',
+                    turn_id='turn-2',
+                    kind='message.delta',
+                    payload={'text': 'Standing by'},
+                )
+
+                # 3. Direct chat (DM)
+                dm_source = mock.Mock(chat_type='dm', chat_name='ryan')
+                publisher.publish('pre_gateway_dispatch', source=dm_source, profile='elio-the-archivist')
+
+                publisher._QUEUE.join()
+
+        server.shutdown()
+        server.server_close()
+
+        self.assertEqual(len(received), 3)
+
+        # Build Room event
+        self.assertEqual(received[0]['roomId'], 'rmus2m5md-3tf50')
+        self.assertEqual(received[0]['roomName'], 'Build Room')
+        self.assertEqual(received[0]['botId'], 'atlas-the-conductor')
+        self.assertEqual(received[0]['source'], 'tool')
+        self.assertEqual(received[0]['type'], 'started')
+
+        # War Room event
+        self.assertEqual(received[1]['roomId'], 'rmus2oxfj-ld8kb')
+        self.assertEqual(received[1]['roomName'], 'War Room')
+        self.assertEqual(received[1]['botId'], 'mira-the-operator')
+        self.assertEqual(received[1]['source'], 'llm')
+        self.assertEqual(received[1]['type'], 'speaking')
+
+        # Direct event
+        self.assertEqual(received[2]['roomId'], 'direct')
+        self.assertEqual(received[2]['roomName'], 'Direct')
+        self.assertEqual(received[2]['botId'], 'elio-the-archivist')
+
+    def test_group_turn_lifecycle_maintains_consistent_room_identity_across_turn(self):
+        received = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                received.append(json.loads(self.rfile.read(int(self.headers['content-length']))))
+                self.send_response(202)
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = HTTPServer(('127.0.0.1', 0), Handler)
+        Thread(target=server.serve_forever, daemon=True).start()
+
+        sample_manifest = {
+            'ui_meta': {
+                'hermes-bots-groups': {
+                    'rooms': {
+                        'id:rmus2m5md-3tf50': {'id': 'rmus2m5md-3tf50', 'roomId': 'rmus2m5md-3tf50', 'name': 'Build Room'},
+                    }
+                }
+            }
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_yaml = Path(tmpdir) / 'profile.yaml'
+            profile_yaml.write_text(json.dumps(sample_manifest), encoding='utf-8')
+
+            # Create state.db mock with Group title
+            import sqlite3
+            db_path = Path(tmpdir) / 'state.db'
+            con = sqlite3.connect(db_path)
+            con.execute('CREATE TABLE sessions (id TEXT PRIMARY KEY, title TEXT, source TEXT, started_at REAL)')
+            con.execute("INSERT INTO sessions VALUES ('sess-group-1', 'Group: rmus2m5md-3tf50 · tmus123', 'bot_room', 1700000000.0)")
+            con.commit()
+            con.close()
+
+            with mock.patch.dict(os.environ, {'HERMES_HOME': tmpdir, 'PRESENCE_BOT_ID': 'vega'}, clear=True), \
+                    mock.patch.object(publisher, '_ENDPOINT', f'http://127.0.0.1:{server.server_port}/observe'):
+
+                session_id = 'sess-group-1'
+                user_msg = '[Group chat: "Build Room"] You are @vega, one participant in a group chat...'
+
+                # Full turn lifecycle
+                publisher.publish('pre_llm_call', session_id=session_id, user_message=user_msg)
+                publisher.publish('pre_tool_call', session_id=session_id, tool_name='run_tests')
+                publisher.publish('post_tool_call', session_id=session_id, tool_name='run_tests', status='success')
+                publisher.publish('post_llm_call', session_id=session_id)
+
+                publisher._QUEUE.join()
+
+        server.shutdown()
+        server.server_close()
+
+        self.assertEqual(len(received), 4)
+        for evt in received:
+            self.assertEqual(evt['roomId'], 'rmus2m5md-3tf50')
+            self.assertEqual(evt['roomName'], 'Build Room')
+            self.assertEqual(evt['botId'], 'vega')
 
 
 if __name__ == '__main__':

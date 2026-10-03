@@ -21,13 +21,17 @@ const isText = (value) => typeof value === 'string' && value.trim() !== ''
 
 // presence.v1 identity comes from the publishing profile on every event; the collector never invents it.
 function identityOf(event) {
-  const { hostId, roomId, botId, pet } = event
+  const { hostId, roomId, botId, pet, roomName } = event
   if (![hostId, roomId, botId, pet?.slug, pet?.version].every(isText)) throw new Error('Event identity requires hostId, roomId, botId and pet { slug, version, url }')
   if (!isText(pet.url) || !/^(\/|https?:\/\/)/.test(pet.url)) throw new Error('pet.url must be a root-relative path or http(s) URL')
-  return { hostId, roomId, botId, pet: { slug: pet.slug, version: pet.version, url: pet.url } }
+  const identity = { hostId, roomId, botId, pet: { slug: pet.slug, version: pet.version, url: pet.url } }
+  if (isText(roomName)) {
+    identity.roomName = roomName.trim()
+  }
+  return identity
 }
 
-const noIdentity = { hostId: null, roomId: null, botId: null, pet: null }
+const noIdentity = { hostId: null, roomId: null, roomName: null, botId: null, pet: null }
 
 export const entityKey = ({ hostId, roomId, botId }) => `${hostId}:${roomId}:${botId}`
 
@@ -110,6 +114,11 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {})
 
     const key = entityKey(identity)
     latestKey = key
+
+    const existing = entities.get(key)
+    if (existing && !identity.roomName && existing.identity.roomName) {
+      identity.roomName = existing.identity.roomName
+    }
 
     entities.set(key, {
       identity,

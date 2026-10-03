@@ -246,4 +246,94 @@ describe('local presence collector', () => {
     expect(presence.entities).toHaveLength(0)
     expect(presence.state).toBe('unobserved')
   })
+
+  it('preserves roomName on identity and updates label without creating a new entity key', async () => {
+    const collector = await startCollector()
+    const bot = {
+      hostId: 'default',
+      roomId: 'rmus2m5md-3tf50',
+      roomName: 'Build Room',
+      botId: 'atlas',
+      pet: { slug: 'atlas', version: '1.0', url: '/pets/atlas.png' },
+    }
+
+    // Ingest first event with roomName
+    await observe(collector, { ...bot, source: 'tool', type: 'started', activity: 'Compiling code' })
+    let presence = await (await fetch(`${collector.url}/presence`)).json()
+    expect(presence.entities).toHaveLength(1)
+    expect(presence.snapshots['default:rmus2m5md-3tf50:atlas']).toMatchObject({
+      hostId: 'default',
+      roomId: 'rmus2m5md-3tf50',
+      roomName: 'Build Room',
+      botId: 'atlas',
+      state: 'working',
+    })
+
+    // Ingest second event with updated roomName on same roomId
+    await observe(collector, {
+      ...bot,
+      roomName: 'Build Room (Renamed)',
+      source: 'llm',
+      type: 'speaking',
+      activity: 'Speaking in build room',
+    })
+
+    presence = await (await fetch(`${collector.url}/presence`)).json()
+    // Must NOT create a new entity; entity count remains 1, entity key is unchanged
+    expect(presence.entities).toHaveLength(1)
+    expect(Object.keys(presence.snapshots)).toEqual(['default:rmus2m5md-3tf50:atlas'])
+    expect(presence.snapshots['default:rmus2m5md-3tf50:atlas']).toMatchObject({
+      hostId: 'default',
+      roomId: 'rmus2m5md-3tf50',
+      roomName: 'Build Room (Renamed)',
+      botId: 'atlas',
+      state: 'speaking',
+    })
+  })
+
+  it('tracks the same bot active in two different rooms as two distinct entities', async () => {
+    const collector = await startCollector()
+    const baseBot = {
+      hostId: 'default',
+      botId: 'atlas',
+      pet: { slug: 'atlas', version: '1.0', url: '/pets/atlas.png' },
+    }
+
+    // Bot in Build Room
+    await observe(collector, {
+      ...baseBot,
+      roomId: 'rmus2m5md-3tf50',
+      roomName: 'Build Room',
+      source: 'tool',
+      type: 'started',
+      activity: 'Building project',
+    })
+
+    // Same bot in War Room
+    await observe(collector, {
+      ...baseBot,
+      roomId: 'rmus2oxfj-ld8kb',
+      roomName: 'War Room',
+      source: 'llm',
+      type: 'speaking',
+      activity: 'Coordinating triage',
+    })
+
+    const presence = await (await fetch(`${collector.url}/presence`)).json()
+    expect(presence.entities).toHaveLength(2)
+    expect(presence.snapshots['default:rmus2m5md-3tf50:atlas']).toMatchObject({
+      roomId: 'rmus2m5md-3tf50',
+      roomName: 'Build Room',
+      botId: 'atlas',
+      state: 'working',
+    })
+    expect(presence.snapshots['default:rmus2oxfj-ld8kb:atlas']).toMatchObject({
+      roomId: 'rmus2oxfj-ld8kb',
+      roomName: 'War Room',
+      botId: 'atlas',
+      state: 'speaking',
+    })
+    // Neither is direct
+    expect(presence.snapshots['default:direct:atlas']).toBeUndefined()
+  })
 })

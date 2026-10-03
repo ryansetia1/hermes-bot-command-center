@@ -155,6 +155,16 @@ h1 em {
   font-size: 0.62rem;
 }
 
+.room-id-badge {
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid #2d3d34;
+  background: #18221c;
+  color: #7a9480;
+  font-size: 0.62rem;
+  font-family: ui-monospace, monospace;
+}
+
 .room-pills {
   display: flex;
   gap: 8px;

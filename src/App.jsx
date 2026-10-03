@@ -71,7 +71,7 @@ function BotCard({ bot, onDismiss }) {
         <div>
           <p className="kicker">BOT IDENTITY</p>
           <h3 id={`bot-${bot.botId}`}>{bot.botId}</h3>
-          <p className="room">#{bot.roomId}</p>
+          <p className="room">{bot.roomName ? bot.roomName : `#${bot.roomId}`}</p>
         </div>
       </div>
 
@@ -108,7 +108,7 @@ function BotCard({ bot, onDismiss }) {
   )
 }
 
-function RoomSection({ roomId, bots, onDismissBot, onDismissRoom }) {
+function RoomSection({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
   // Sort bots: speaking first, working second, then error, idle, and unobserved
   const sortedBots = [...bots].sort((a, b) => {
     const prioA = STATE_PRIORITY[a.state] ?? 99
@@ -128,12 +128,18 @@ function RoomSection({ roomId, bots, onDismissBot, onDismissRoom }) {
     unobserved: bots.filter((b) => b.state === 'unobserved').length,
   }
 
+  const displayName = roomName || bots[0]?.roomName || (roomId === 'direct' ? 'Direct' : roomId)
+  const isCustomName = Boolean(displayName && displayName !== roomId && displayName !== `#${roomId}`)
+
   return (
     <section className="room-section" aria-labelledby={`room-title-${roomId}`}>
       <div className="room-summary">
         <div className="room-meta">
           <p className="kicker">ROOM</p>
-          <h2 id={`room-title-${roomId}`}>#{roomId}</h2>
+          <h2 id={`room-title-${roomId}`}>{displayName}</h2>
+          {isCustomName && (
+            <span className="room-id-badge" title={`Identity key: ${roomId}`}>#{roomId}</span>
+          )}
           <span className="room-total-badge">{bots.length} {bots.length === 1 ? 'bot' : 'bots'}</span>
         </div>
         <div className="room-pills">
@@ -157,7 +163,7 @@ function RoomSection({ roomId, bots, onDismissBot, onDismissRoom }) {
               type="button"
               className="btn-room-clear"
               onClick={() => onDismissRoom(roomId)}
-              title={`Clear all bots in #${roomId}`}
+              title={`Clear all bots in ${displayName}`}
             >
               Clear Room
             </button>
@@ -244,17 +250,27 @@ export default function App() {
   // Group entities by roomId
   const roomsMap = new Map()
   for (const entity of rawEntities) {
-    const roomId = entity.roomId || 'default-room'
-    if (!roomsMap.has(roomId)) roomsMap.set(roomId, [])
-    roomsMap.get(roomId).push(entity)
+    const roomId = entity.roomId || 'direct'
+    if (!roomsMap.has(roomId)) {
+      roomsMap.set(roomId, {
+        roomId,
+        roomName: entity.roomName || (roomId === 'direct' ? 'Direct' : roomId),
+        bots: [],
+      })
+    }
+    const room = roomsMap.get(roomId)
+    if (entity.roomName && (!room.roomName || room.roomName === roomId)) {
+      room.roomName = entity.roomName
+    }
+    room.bots.push(entity)
   }
 
   // Sort rooms by priority of contained bots: speaking/working rooms first
-  const sortedRooms = Array.from(roomsMap.entries()).sort(([roomA, botsA], [roomB, botsB]) => {
-    const minPrioA = Math.min(...botsA.map((b) => STATE_PRIORITY[b.state] ?? 99))
-    const minPrioB = Math.min(...botsB.map((b) => STATE_PRIORITY[b.state] ?? 99))
+  const sortedRooms = Array.from(roomsMap.values()).sort((roomA, roomB) => {
+    const minPrioA = Math.min(...roomA.bots.map((b) => STATE_PRIORITY[b.state] ?? 99))
+    const minPrioB = Math.min(...roomB.bots.map((b) => STATE_PRIORITY[b.state] ?? 99))
     if (minPrioA !== minPrioB) return minPrioA - minPrioB
-    return roomA.localeCompare(roomB)
+    return (roomA.roomName || roomA.roomId).localeCompare(roomB.roomName || roomB.roomId)
   })
 
   const primaryHost = presence.hostId || rawEntities[0]?.hostId || 'default'
@@ -301,11 +317,12 @@ export default function App() {
       </header>
 
       <div className="rooms-container">
-        {sortedRooms.map(([roomId, bots]) => (
+        {sortedRooms.map((room) => (
           <RoomSection
-            key={roomId}
-            roomId={roomId}
-            bots={bots}
+            key={room.roomId}
+            roomId={room.roomId}
+            roomName={room.roomName}
+            bots={room.bots}
             onDismissBot={handleDismissBot}
             onDismissRoom={handleDismissRoom}
           />

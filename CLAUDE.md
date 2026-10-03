@@ -20,5 +20,5 @@ Local command center to monitor Hermes bots via `presence.v1` telemetry.
 ## Code & Architecture Principles
 - Keep changes minimal and focused (YAGNI / Ponytail).
 - Clean Code: intention-revealing names, single responsibility, clean error handling.
-- Presence contract (`presence.v1`): `hostId`, `roomId`, `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, `reason`.
+- Presence contract (`presence.v1`): `hostId`, `roomId`, `roomName` (optional display label), `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, `reason`.
 - Publisher sends identity with every event; collector validates identity and stores state in-memory.
