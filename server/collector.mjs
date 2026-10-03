@@ -29,17 +29,62 @@ function identityOf(event) {
 
 const noIdentity = { hostId: null, roomId: null, botId: null, pet: null }
 
+export const entityKey = ({ hostId, roomId, botId }) => `${hostId}:${roomId}:${botId}`
+
 export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {}) {
-  let latest = null
-  let expiryTimer = null
+  const entities = new Map()
+  const expiryTimers = new Map()
+  let latestKey = null
   const clients = new Set()
 
+  function entityPresence(entity) {
+    const elapsed = now().getTime() - new Date(entity.updatedAt).getTime()
+    if (elapsed > ttlMs) {
+      return {
+        version: 'presence.v1',
+        ...entity.identity,
+        state: 'unobserved',
+        activity: entity.activity,
+        updatedAt: entity.updatedAt,
+        reason: `No native lifecycle event received within ${ttlMs / 1000} seconds.`,
+      }
+    }
+    return {
+      version: 'presence.v1',
+      ...entity.identity,
+      state: entity.state,
+      activity: entity.activity,
+      updatedAt: entity.updatedAt,
+      reason: null,
+    }
+  }
+
   function getPresence() {
-    if (!latest) return { version: 'presence.v1', ...noIdentity, state: 'unobserved', activity: null, updatedAt: null, reason: 'No native lifecycle event has been received.' }
-    const elapsed = now().getTime() - new Date(latest.updatedAt).getTime()
-    if (elapsed > ttlMs) return { version: 'presence.v1', ...latest.identity, state: 'unobserved', activity: latest.activity, updatedAt: latest.updatedAt, reason: `No native lifecycle event received within ${ttlMs / 1000} seconds.` }
-    const { identity, ...observed } = latest
-    return { version: 'presence.v1', ...identity, ...observed, reason: null }
+    if (entities.size === 0) {
+      return {
+        version: 'presence.v1',
+        ...noIdentity,
+        state: 'unobserved',
+        activity: null,
+        updatedAt: null,
+        reason: 'No native lifecycle event has been received.',
+        entities: [],
+        snapshots: {},
+      }
+    }
+
+    const entityList = Array.from(entities.values()).map(entityPresence)
+    const snapshots = Object.fromEntries(entityList.map((item) => [entityKey(item), item]))
+    const latestEntity = (latestKey && entities.has(latestKey))
+      ? entityPresence(entities.get(latestKey))
+      : entityList[entityList.length - 1]
+
+    return {
+      version: 'presence.v1',
+      ...latestEntity,
+      entities: entityList,
+      snapshots,
+    }
   }
 
   function broadcast() {
@@ -47,18 +92,64 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {})
     clients.forEach((response) => response.write(message))
   }
 
-  function scheduleExpiry() {
-    clearTimeout(expiryTimer)
-    expiryTimer = setTimeout(broadcast, ttlMs + 1)
+  function scheduleExpiry(key) {
+    if (expiryTimers.has(key)) {
+      clearTimeout(expiryTimers.get(key))
+    }
+    const timer = setTimeout(() => {
+      expiryTimers.delete(key)
+      broadcast()
+    }, ttlMs + 1)
+    expiryTimers.set(key, timer)
   }
 
   function ingest(event) {
+    const identity = identityOf(event)
     const state = stateForEvent[`${event.source}:${event.type}`]
     if (!state) throw new Error(`Unsupported native lifecycle event: ${event.source}:${event.type}`)
-    // ponytail: single-bot MVP, the latest event's identity replaces the previous one; key by botId for multi-bot.
-    latest = { identity: identityOf(event), state, activity: defaultActivity(event, state), updatedAt: event.at ?? now().toISOString() }
-    scheduleExpiry()
+
+    const key = entityKey(identity)
+    latestKey = key
+
+    entities.set(key, {
+      identity,
+      state,
+      activity: defaultActivity(event, state),
+      updatedAt: event.at ?? now().toISOString(),
+    })
+
+    scheduleExpiry(key)
     broadcast()
+  }
+
+  function remove({ key, roomId, botId, state } = {}) {
+    let deletedCount = 0
+    const keysToDelete = []
+
+    for (const [k, ent] of entities.entries()) {
+      const pres = entityPresence(ent)
+      const matchesKey = key ? k === key : true
+      const matchesRoom = roomId ? ent.identity.roomId === roomId : true
+      const matchesBot = botId ? ent.identity.botId === botId : true
+      const matchesState = state ? pres.state === state : true
+
+      if (matchesKey && matchesRoom && matchesBot && matchesState) {
+        keysToDelete.push(k)
+      }
+    }
+
+    for (const k of keysToDelete) {
+      if (expiryTimers.has(k)) {
+        clearTimeout(expiryTimers.get(k))
+        expiryTimers.delete(k)
+      }
+      entities.delete(k)
+      if (latestKey === k) latestKey = null
+      deletedCount++
+    }
+
+    broadcast()
+    return deletedCount
   }
 
   const server = createServer(async (request, response) => {
@@ -86,6 +177,16 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {})
       }
       return
     }
+    if (request.method === 'DELETE' && url.pathname === '/presence') {
+      const key = url.searchParams.get('key')
+      const roomId = url.searchParams.get('roomId')
+      const botId = url.searchParams.get('botId')
+      const state = url.searchParams.get('state')
+      const deleted = remove({ key, roomId, botId, state })
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end(JSON.stringify({ ok: true, deleted }))
+      return
+    }
     response.writeHead(404).end()
   })
 
@@ -95,11 +196,13 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {})
       return `http://127.0.0.1:${address.port}`
     },
     ingest,
+    remove,
     listen(port = 8787) {
       return new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
     },
     close() {
-      clearTimeout(expiryTimer)
+      for (const timer of expiryTimers.values()) clearTimeout(timer)
+      expiryTimers.clear()
       clients.forEach((response) => response.end())
       return new Promise((resolve) => server.close(resolve))
     },

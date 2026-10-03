@@ -14,19 +14,18 @@ Kontrak `presence.v1`: `hostId`, `roomId`, `botId`, `state`, `activity`, `update
 
 ## Jalankan
 
-Buka **dua Terminal macOS terpisah**. Salin hanya isi blok perintah di bawah—jangan salin heading atau kalimat penjelasan ke shell.
-
-Terminal pertama (collector):
+Cukup jalankan satu perintah di Terminal macOS:
 
 ```bash
-cd "$HOME/Downloads/hermes-bot-command-center" && npm install && npm run collector
+cd "$HOME/Downloads/hermes-bot-command-center" && npm install && npm run dashboard
 ```
 
-Terminal kedua (dashboard):
+Perintah tunggal ini secara otomatis:
+- Menjalankan local presence collector (port `8787`) dan Vite dev server secara bersamaan.
+- Mendeteksi dan membuka URL dashboard di browser bawaan macOS begitu server siap (bisa dinonaktifkan dengan opsi `--no-open`).
+- Meneruskan sinyal `Ctrl-C` (`SIGINT`) dan `SIGTERM` secara bersih ke kedua child process, serta mencegah *orphan process* apabila salah satu proses berhenti mendadak.
 
-```bash
-cd "$HOME/Downloads/hermes-bot-command-center" && npm run dev
-```
+*(Jika ingin menjalankan secara terpisah di terminal berbeda, gunakan `npm run collector` dan `npm run dev`.)*.
 
 Vite mem-proxy `/presence` dan `/events` ke collector loopback pada port `8787`; dashboard mengambil snapshot awal lalu menerima pembaruan lewat SSE.
 

@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "node scripts/launcher.mjs",
+    "dashboard": "node scripts/launcher.mjs",
     "dev": "vite",
     "collector": "node server/index.mjs",
     "build": "vite build",
