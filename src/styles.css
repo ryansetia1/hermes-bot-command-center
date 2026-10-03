@@ -556,77 +556,77 @@ footer {
 }
 
 .scene-floor {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 28px 20px;
-  justify-content: center;
-  padding: 48px 24px 32px;
+  position: relative;
+  min-height: 60vh;
+  overflow: hidden;
   background:
-    linear-gradient(#1d2824 0 62%, #2a2418 62% 100%);
+    linear-gradient(#1d2824 0 34%, #2a2418 34% 100%);
   border: 2px solid #34463d;
   border-radius: 16px;
 }
 
 .sprite {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 8px;
-  width: 170px;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transition: left 3.5s ease-in-out, top 3.5s ease-in-out;
+}
+
+.sprite-btn {
+  display: block;
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.sprite-btn:focus-visible {
+  outline: 2px solid #f5f5f0;
+  outline-offset: 4px;
+}
+
+.sprite-body {
+  display: block;
 }
 
 .sprite .btn-card-dismiss {
   position: absolute;
-  top: -8px;
-  right: 4px;
+  top: -10px;
+  right: -10px;
+  opacity: 0;
 }
 
-.sprite-bubble {
-  max-width: 100%;
-  padding: 6px 10px;
-  overflow: hidden;
-  font-size: 0.78rem;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: #f5f5f0;
-  color: #101413;
-  border-radius: 10px;
+.sprite:hover .btn-card-dismiss,
+.sprite:focus-within .btn-card-dismiss {
+  opacity: 1;
 }
 
 .sprite-body .pet,
 .sprite-body .pet-fallback {
-  width: 84px;
-  height: 84px;
+  display: block;
+  width: 96px;
+  height: 96px;
 }
 
-.sprite-name {
-  font-size: 0.95rem;
-}
-
-.sprite-age {
-  font: 500 0.66rem/1.35 'DM Mono', monospace;
-  color: #9bb49e;
-  text-align: center;
-}
-
-.sprite.idle .sprite-body { animation: sprite-breathe 4s ease-in-out infinite; }
-.sprite.working .sprite-body { animation: sprite-busy 0.35s ease-in-out infinite; }
-.sprite.speaking .sprite-bubble { animation: sprite-pulse 0.9s ease-in-out infinite; }
-.sprite.error .sprite-body { animation: sprite-shake 0.4s linear infinite; filter: sepia(1) saturate(6) hue-rotate(-30deg); }
-.sprite.working .sprite-bubble { background: #ffd66b; }
-.sprite.working .sprite-bubble::before { content: '⚙ '; }
-.sprite.unobserved .sprite-body { filter: grayscale(1) opacity(0.5); }
-.sprite.unobserved .sprite-bubble { opacity: 0.5; }
+.sprite.idle .sprite-btn { animation: sprite-breathe 4s ease-in-out infinite; }
+.sprite.working .sprite-btn { animation: sprite-busy 0.35s ease-in-out infinite; }
+.sprite.speaking .sprite-btn { animation: sprite-pulse 0.9s ease-in-out infinite; }
+.sprite.error .sprite-btn { animation: sprite-shake 0.4s linear infinite; filter: sepia(1) saturate(6) hue-rotate(-30deg); }
+.sprite.unobserved .sprite-btn { filter: grayscale(1) opacity(0.5); }
 
 @keyframes sprite-breathe { 50% { transform: translateY(-4px) scale(1.03); } }
 @keyframes sprite-busy { 50% { transform: translateY(-8px) rotate(-3deg); } }
 @keyframes sprite-pulse { 50% { transform: scale(1.1); } }
 @keyframes sprite-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
+@media (max-width: 640px) {
+  .scene-floor { min-height: 70vh; }
+  .sprite-body .pet,
+  .sprite-body .pet-fallback { width: 72px; height: 72px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .sprite .sprite-body,
-  .sprite .sprite-bubble {
-    animation: none !important;
-  }
+  .sprite { transition: none; }
+  .sprite .sprite-btn { animation: none !important; }
 }
