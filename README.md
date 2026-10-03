@@ -72,3 +72,12 @@ npm run build
 ```
 
 Test collector membuktikan identitas arbitrer dari event → `presence.v1` → SSE dan `/presence`, event tanpa identitas ditolak, dan TTL menghasilkan `unobserved`; test plugin membuktikan mapping lima hook native, default identitas per profile, override environment, POST nyata berisi identitas, dan fail-open saat collector mati.
+
+
+## Memperbarui plugin yang terpasang
+
+Hermes memuat **salinan** plugin (`~/.hermes/plugins/presence_publisher` dan `~/.hermes/profiles/*/plugins/presence_publisher`), bukan folder repo ini. Setelah publisher berubah (mis. `message`, avatar), salin ulang lalu restart Hermes agar plugin dimuat ulang:
+
+```bash
+for d in ~/.hermes/plugins/presence_publisher ~/.hermes/profiles/*/plugins/presence_publisher; do cp hermes_plugin/presence_publisher/{publisher.py,__init__.py,plugin.yaml} "$d/"; done
+```

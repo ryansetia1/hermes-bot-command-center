@@ -109,16 +109,17 @@ function Sprite({ bot, spot, unread, onSelect }) {
   const [position, setPosition] = useState({ ...spot, flip: false })
   const positionRef = useRef(position)
   positionRef.current = position
-  const idle = bot.state === 'idle'
+  // A bot with an unread reply stays put so it is easy to click; it resumes wandering once read.
+  const wanders = bot.state === 'idle' && !unread
 
   useEffect(() => {
-    if (!idle || prefersReducedMotion()) return undefined
+    if (!wanders || prefersReducedMotion()) return undefined
     const timer = setInterval(() => {
       const target = wanderTarget()
       setPosition({ ...target, flip: target.x < positionRef.current.x })
     }, WANDER_MS + Math.random() * 2_000)
     return () => clearInterval(timer)
-  }, [idle])
+  }, [wanders])
 
   return (
     <div className={`sprite ${status.tone}`} style={{ left: `${position.x}%`, top: `${position.y}%` }}>
@@ -131,7 +132,7 @@ function Sprite({ bot, spot, unread, onSelect }) {
         aria-label={`${bot.botId}: ${status.label}${typing ? ', typing' : ''}${unread ? ', unread message' : ''}`}
         onClick={() => onSelect(key)}
       >
-        <span className="sprite-body" style={position.flip ? { transform: 'scaleX(-1)' } : undefined}>
+        <span className={`sprite-body${position.flip ? ' flipped' : ''}`}>
           <Pet pet={bot.pet} botId={bot.botId} state={bot.state} />
         </span>
       </button>

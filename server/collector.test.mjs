@@ -348,6 +348,8 @@ describe('GET /hermes-pets', () => {
   writeFileSync(join(hermesHome, 'profiles/elio/pets/ninjacat/spritesheet.webp'), 'sheet')
   writeFileSync(join(hermesHome, 'profiles/elio/pets/ninjacat/secret.txt'), 'nope')
   writeFileSync(join(hermesHome, 'pets/ninjacat/pet.json'), '{}')
+  mkdirSync(join(hermesHome, 'profiles/elio/assets'), { recursive: true })
+  writeFileSync(join(hermesHome, 'profiles/elio/assets/avatar.png'), 'png')
   const get = async (path) => {
     const collector = await startCollector({ hermesHome })
     return fetch(`${collector.url}${path}`)
@@ -373,6 +375,17 @@ describe('GET /hermes-pets', () => {
       '/hermes-pets/elio/ghost/pet.json',
     ].map(async (path) => (await get(path)).status))
     expect(statuses).toEqual([400, 400, 400, 400, 400, 404, 404])
+  })
+
+  it('serves a profile avatar and rejects bad avatar requests', async () => {
+    const avatar = await get('/hermes-avatars/elio/avatar.png')
+    expect([avatar.status, avatar.headers.get('content-type')]).toEqual([200, 'image/png'])
+    const statuses = await Promise.all([
+      '/hermes-avatars/..%2Felio/avatar.png',
+      '/hermes-avatars/elio/other.png',
+      '/hermes-avatars/nobody/avatar.png',
+    ].map(async (path) => (await get(path)).status))
+    expect(statuses).toEqual([400, 400, 404])
   })
 })
 
