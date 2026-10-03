@@ -186,12 +186,15 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
       return
     }
     const profileHome = profile === 'default' ? hermesHome : join(hermesHome, 'profiles', profile)
-    try {
-      const body = await readFile(join(profileHome, 'pets', slug, file))
-      response.writeHead(200, { 'content-type': contentType, 'cache-control': 'no-cache' }).end(body)
-    } catch {
-      response.writeHead(404).end()
+    // The profile's own pets first, then the shared pets dir of the Hermes root.
+    for (const home of [profileHome, hermesHome]) {
+      try {
+        const body = await readFile(join(home, 'pets', slug, file))
+        response.writeHead(200, { 'content-type': contentType, 'cache-control': 'no-cache' }).end(body)
+        return
+      } catch { /* try the next location */ }
     }
+    response.writeHead(404).end()
   }
 
   const server = createServer(async (request, response) => {

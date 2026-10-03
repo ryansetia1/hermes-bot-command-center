@@ -456,7 +456,9 @@ def _hermes_pet(profile: str) -> dict | None:
         slug = config["display"]["pet"]["slug"]
         if not isinstance(slug, str) or not _SAFE_SEGMENT.match(slug):
             return None
-        sheet = next((f for f in (home / "pets" / slug).glob("spritesheet.*") if f.suffix in (".webp", ".png")), None)  # formats the collector serves
+        # The profile's own pets first, then the shared ~/.hermes/pets (where the desktop app keeps most pets).
+        sheet = next((f for h in (home, Path.home() / ".hermes") for f in (h / "pets" / slug).glob("spritesheet.*")
+                      if f.suffix in (".webp", ".png")), None)  # formats the collector serves
         if sheet is None:
             return None
         return {
