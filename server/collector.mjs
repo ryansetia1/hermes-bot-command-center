@@ -24,7 +24,7 @@ function defaultActivity(event, state) {
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const PET_FILES = { 'pet.json': 'application/json', 'spritesheet.webp': 'image/webp', 'spritesheet.png': 'image/png' }
 
-const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value)
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 
 async function readProfile(file) {
   try {
@@ -43,10 +43,11 @@ async function readRoster(hermesHome) {
     .map(([, room]) => ({
       roomId: room.roomId,
       name: isText(room.name) ? room.name : room.roomId,
-      members: (Array.isArray(room.members) ? room.members : []).map((member) => member?.handle).filter(isText),
+      members: (Array.isArray(room.members) ? room.members : []).map((member) => member?.handle).filter((handle) => SAFE_SEGMENT.test(handle)),
     }))
   const dirs = await readdir(join(hermesHome, 'profiles'), { withFileTypes: true }).catch(() => [])
-  const botIds = ['default', ...dirs.filter((dir) => dir.isDirectory() && SAFE_SEGMENT.test(dir.name)).map((dir) => dir.name)]
+  // The default profile is the root profile.yaml itself; an empty/missing root means no default bot.
+  const botIds = [...(Object.keys(root).length ? ['default'] : []), ...dirs.filter((dir) => dir.isDirectory() && SAFE_SEGMENT.test(dir.name)).map((dir) => dir.name)]
   const bots = await Promise.all(botIds.map(async (botId) => {
     const profile = await readProfile(botId === 'default' ? join(hermesHome, 'profile.yaml') : join(hermesHome, 'profiles', botId, 'profile.yaml'))
     const title = profile.ui_meta?.['hermes-bots']?.title

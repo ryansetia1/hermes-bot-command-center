@@ -25,7 +25,7 @@ export function useRoster() {
   const [roster, setRoster] = useState({ rooms: [], bots: [] })
   useEffect(() => {
     let active = true
-    fetch('/roster').then((response) => response.json()).then((data) => active && setRoster(data)).catch(() => {})
+    fetch('/roster').then((response) => response.ok ? response.json() : Promise.reject(new Error('Roster unavailable'))).then((data) => active && setRoster(data)).catch(() => {})
     return () => { active = false }
   }, [])
   return roster

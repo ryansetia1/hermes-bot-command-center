@@ -456,7 +456,7 @@ describe('GET /roster', () => {
       const collector = await startCollector({ hermesHome })
       const response = await fetch(`${collector.url}/roster`)
       expect(response.status).toBe(200)
-      expect((await response.json()).rooms).toEqual([])
+      expect(await response.json()).toEqual({ rooms: [], bots: [] })
     }
   })
 })

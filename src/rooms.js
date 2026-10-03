@@ -21,7 +21,7 @@ export function deriveRooms(entities) {
 
 // Seeds live entities with idle placeholders from the Hermes roster; live entities (matched by roomId + botId) win.
 export function mergeRoster(entities, roster) {
-  const seen = new Set(entities.map((entity) => `${entity.roomId}:${entity.botId}`))
+  const seen = new Set(entities.map((entity) => `${entity.roomId || DIRECT_ROOM_ID}:${entity.botId}`))
   const hostId = entities[0]?.hostId ?? 'default'
   const seeded = []
   const seed = (roomId, roomName, botId) => {
