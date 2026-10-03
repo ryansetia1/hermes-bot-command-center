@@ -417,3 +417,46 @@ describe('optional message', () => {
     expect(await entityOf(collector)).toMatchObject({ state: 'unobserved', message: 'last words' })
   })
 })
+
+describe('GET /roster', () => {
+  const home = mkdtempSync(join(tmpdir(), 'hermes-roster-'))
+  const yamlText = `ui_meta:
+  hermes-bots-groups:
+    rooms:
+      "id:r1":
+        name: Build Room
+        roomId: r1
+        members: [{ handle: atlas }, { handle: iris }]
+      "id:r2":
+        name: Gone
+        roomId: r2
+        members: [{ handle: atlas }]
+    deleted: { "id:r2": 1 }
+`
+  writeFileSync(join(home, 'profile.yaml'), yamlText)
+  for (const [bot, title] of [['atlas', 'Atlas The Conductor'], ['iris', null]]) {
+    mkdirSync(join(home, 'profiles', bot), { recursive: true })
+    if (title) writeFileSync(join(home, 'profiles', bot, 'profile.yaml'), `ui_meta:\n  hermes-bots:\n    title: ${title}\n`)
+  }
+
+  it('lists live rooms, skips deleted ones and names bots by profile directory', async () => {
+    const collector = await startCollector({ hermesHome: home })
+    const response = await fetch(`${collector.url}/roster`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      rooms: [{ roomId: 'r1', name: 'Build Room', members: ['atlas', 'iris'] }],
+      bots: [{ botId: 'default', title: 'default' }, { botId: 'atlas', title: 'Atlas The Conductor' }, { botId: 'iris', title: 'iris' }],
+    })
+  })
+
+  it('returns an empty roster for missing or invalid files', async () => {
+    const bad = mkdtempSync(join(tmpdir(), 'hermes-bad-'))
+    writeFileSync(join(bad, 'profile.yaml'), 'a: [unclosed')
+    for (const hermesHome of [join(bad, 'nope'), bad]) {
+      const collector = await startCollector({ hermesHome })
+      const response = await fetch(`${collector.url}/roster`)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ rooms: [], bots: [] })
+    }
+  })
+})

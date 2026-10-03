@@ -18,3 +18,18 @@ export function deriveRooms(entities) {
   }
   return { groupRooms: [...groups.values()], oneOnOneRooms }
 }
+
+// Seeds live entities with idle placeholders from the Hermes roster; live entities (matched by roomId + botId) win.
+export function mergeRoster(entities, roster) {
+  const seen = new Set(entities.map((entity) => `${entity.roomId || DIRECT_ROOM_ID}:${entity.botId}`))
+  const hostId = entities[0]?.hostId ?? 'default'
+  const seeded = []
+  const seed = (roomId, roomName, botId) => {
+    if (seen.has(`${roomId}:${botId}`)) return
+    seen.add(`${roomId}:${botId}`)
+    seeded.push({ hostId, roomId, roomName, botId, state: 'idle', activity: 'Waiting for the next task', pet: { slug: botId, version: '1', url: `/hermes-avatars/${botId}/avatar.png` } })
+  }
+  for (const room of roster.rooms ?? []) room.members.forEach((botId) => seed(room.roomId, room.name, botId))
+  for (const bot of roster.bots ?? []) seed(DIRECT_ROOM_ID, bot.botId, bot.botId)
+  return [...entities, ...seeded]
+}

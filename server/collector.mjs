@@ -1,7 +1,8 @@
 import { createServer } from 'node:http'
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { parse as parseYaml } from 'yaml'
 
 const stateForEvent = {
   'gateway:received': 'working',
@@ -22,6 +23,38 @@ function defaultActivity(event, state) {
 
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const PET_FILES = { 'pet.json': 'application/json', 'spritesheet.webp': 'image/webp', 'spritesheet.png': 'image/png' }
+
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+
+async function readProfile(file) {
+  try {
+    const profile = parseYaml(await readFile(file, 'utf8'))
+    return isObject(profile) ? profile : {}
+  } catch { return {} } // missing/unreadable/bad YAML: never log contents
+}
+
+// Read-only Hermes roster: group rooms from the root profile.yaml plus one bot per profile directory.
+async function readRoster(hermesHome) {
+  const root = await readProfile(join(hermesHome, 'profile.yaml'))
+  const groups = root.ui_meta?.['hermes-bots-groups']
+  const deleted = isObject(groups?.deleted) ? groups.deleted : {}
+  const rooms = Object.entries(isObject(groups?.rooms) ? groups.rooms : {})
+    .filter(([key, room]) => isObject(room) && isText(room.roomId) && !(key in deleted) && !(`id:${room.roomId}` in deleted))
+    .map(([, room]) => ({
+      roomId: room.roomId,
+      name: isText(room.name) ? room.name : room.roomId,
+      members: (Array.isArray(room.members) ? room.members : []).map((member) => member?.handle).filter((handle) => SAFE_SEGMENT.test(handle)),
+    }))
+  const dirs = await readdir(join(hermesHome, 'profiles'), { withFileTypes: true }).catch(() => [])
+  // The default profile is the root profile.yaml itself; an empty/missing root means no default bot.
+  const botIds = [...(Object.keys(root).length ? ['default'] : []), ...dirs.filter((dir) => dir.isDirectory() && SAFE_SEGMENT.test(dir.name)).map((dir) => dir.name)]
+  const bots = await Promise.all(botIds.map(async (botId) => {
+    const profile = await readProfile(botId === 'default' ? join(hermesHome, 'profile.yaml') : join(hermesHome, 'profiles', botId, 'profile.yaml'))
+    const title = profile.ui_meta?.['hermes-bots']?.title
+    return { botId, title: isText(title) ? title.trim() : botId }
+  }))
+  return { rooms, bots }
+}
 
 const isText = (value) => typeof value === 'string' && value.trim() !== ''
 
@@ -218,6 +251,11 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
     if (request.method === 'GET' && url.pathname === '/presence') {
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
       response.end(JSON.stringify(getPresence()))
+      return
+    }
+    if (request.method === 'GET' && url.pathname === '/roster') {
+      response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+      response.end(JSON.stringify(await readRoster(hermesHome)))
       return
     }
     if (request.method === 'GET' && url.pathname.startsWith('/hermes-pets/')) {

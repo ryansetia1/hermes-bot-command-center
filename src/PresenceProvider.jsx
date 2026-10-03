@@ -20,6 +20,17 @@ export function PresenceProvider({ children }) {
   return <PresenceContext.Provider value={presence}>{children}</PresenceContext.Provider>
 }
 
+// Hermes roster is read once on mount; a failed fetch just means no seeded tiles.
+export function useRoster() {
+  const [roster, setRoster] = useState({ rooms: [], bots: [] })
+  useEffect(() => {
+    let active = true
+    fetch('/roster').then((response) => response.ok ? response.json() : Promise.reject(new Error('Roster unavailable'))).then((data) => active && setRoster(data)).catch(() => {})
+    return () => { active = false }
+  }, [])
+  return roster
+}
+
 export function usePresence() {
   const presence = useContext(PresenceContext)
   if (presence === undefined) throw new Error('usePresence must be used inside PresenceProvider')

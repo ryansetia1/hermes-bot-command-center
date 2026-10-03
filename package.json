@@ -14,9 +14,10 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "vite": "latest",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "vitest": "latest"
