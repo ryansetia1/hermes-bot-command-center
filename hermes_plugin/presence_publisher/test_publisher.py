@@ -127,6 +127,8 @@ class HermesPetTests(unittest.TestCase):
         self.configure('ninjacat')
         with mock.patch.dict(os.environ, {'PRESENCE_PET_SLUG': 'x', 'PRESENCE_PET_VERSION': '9', 'PRESENCE_PET_URL': '/pets/x.png'}):
             self.assertEqual(identity()['pet'], {'slug': 'x', 'version': '9', 'url': '/pets/x.png'})
+        with mock.patch.dict(os.environ, {'PRESENCE_PET_SLUG': 'x'}):
+            self.assertEqual(identity()['pet'], {'slug': 'x', 'version': '1.0.0', 'url': '/pets/x-v1.png'})
 
     def test_missing_or_unsafe_pet_falls_back_to_default(self):
         default = {'slug': 'elio', 'version': '1.0.0', 'url': '/pets/elio-v1.png'}

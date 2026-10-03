@@ -454,7 +454,7 @@ def _hermes_pet(profile: str) -> dict | None:
         slug = config["display"]["pet"]["slug"]
         if not isinstance(slug, str) or not _SAFE_SEGMENT.match(slug):
             return None
-        sheet = next(iter(sorted((home / "pets" / slug).glob("spritesheet.*"))), None)
+        sheet = next((f for f in (home / "pets" / slug).glob("spritesheet.*") if f.suffix in (".webp", ".png")), None)  # formats the collector serves
         if sheet is None:
             return None
         return {
@@ -468,7 +468,7 @@ def _hermes_pet(profile: str) -> dict | None:
 
 def identity(room_id: str | None = None, **kwargs) -> dict:
     profile = _clean_str(kwargs.get("profile")) or _clean_str(_CURRENT_PROFILE) or _profile(**kwargs)
-    hermes_pet = _hermes_pet(profile) or {}
+    hermes_pet = {} if os.getenv("PRESENCE_PET_SLUG") else _hermes_pet(profile) or {}
     slug = os.getenv("PRESENCE_PET_SLUG") or hermes_pet.get("slug") or profile
     effective_room, effective_room_name = resolve_room_info(room_id=room_id, **kwargs)
     return {
