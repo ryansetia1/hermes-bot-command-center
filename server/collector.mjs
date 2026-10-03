@@ -17,16 +17,29 @@ function defaultActivity(event, state) {
   return 'Processing native lifecycle event'
 }
 
-export function createCollector({ identity, ttlMs = 30_000, now = () => new Date() }) {
+const isText = (value) => typeof value === 'string' && value.trim() !== ''
+
+// presence.v1 identity comes from the publishing profile on every event; the collector never invents it.
+function identityOf(event) {
+  const { hostId, roomId, botId, pet } = event
+  if (![hostId, roomId, botId, pet?.slug, pet?.version].every(isText)) throw new Error('Event identity requires hostId, roomId, botId and pet { slug, version, url }')
+  if (!isText(pet.url) || !/^(\/|https?:\/\/)/.test(pet.url)) throw new Error('pet.url must be a root-relative path or http(s) URL')
+  return { hostId, roomId, botId, pet: { slug: pet.slug, version: pet.version, url: pet.url } }
+}
+
+const noIdentity = { hostId: null, roomId: null, botId: null, pet: null }
+
+export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {}) {
   let latest = null
   let expiryTimer = null
   const clients = new Set()
 
   function getPresence() {
-    if (!latest) return { version: 'presence.v1', ...identity, state: 'unobserved', activity: null, updatedAt: null, reason: 'No native lifecycle event has been received.' }
+    if (!latest) return { version: 'presence.v1', ...noIdentity, state: 'unobserved', activity: null, updatedAt: null, reason: 'No native lifecycle event has been received.' }
     const elapsed = now().getTime() - new Date(latest.updatedAt).getTime()
-    if (elapsed > ttlMs) return { version: 'presence.v1', ...identity, state: 'unobserved', activity: latest.activity, updatedAt: latest.updatedAt, reason: `No native lifecycle event received within ${ttlMs / 1000} seconds.` }
-    return { version: 'presence.v1', ...identity, ...latest, reason: null }
+    if (elapsed > ttlMs) return { version: 'presence.v1', ...latest.identity, state: 'unobserved', activity: latest.activity, updatedAt: latest.updatedAt, reason: `No native lifecycle event received within ${ttlMs / 1000} seconds.` }
+    const { identity, ...observed } = latest
+    return { version: 'presence.v1', ...identity, ...observed, reason: null }
   }
 
   function broadcast() {
@@ -42,7 +55,8 @@ export function createCollector({ identity, ttlMs = 30_000, now = () => new Date
   function ingest(event) {
     const state = stateForEvent[`${event.source}:${event.type}`]
     if (!state) throw new Error(`Unsupported native lifecycle event: ${event.source}:${event.type}`)
-    latest = { state, activity: defaultActivity(event, state), updatedAt: event.at ?? now().toISOString() }
+    // ponytail: single-bot MVP, the latest event's identity replaces the previous one; key by botId for multi-bot.
+    latest = { identity: identityOf(event), state, activity: defaultActivity(event, state), updatedAt: event.at ?? now().toISOString() }
     scheduleExpiry()
     broadcast()
   }

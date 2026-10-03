@@ -10,7 +10,7 @@ Hermes native hooks → presence-publisher plugin → HTTP POST /observe
 Vite card ← SSE /events ← local collector ← TTL → unobserved
 ```
 
-Collector memegang kontrak `presence.v1`: `hostId`, `roomId`, `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, serta `reason` saat tidak teramati.
+Kontrak `presence.v1`: `hostId`, `roomId`, `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, serta `reason` saat tidak teramati. Identitas (`hostId`, `roomId`, `botId`, `pet`) **dikirim publisher di setiap event** dari profile Hermes yang aktif; collector memvalidasinya (event tanpa identitas lengkap ditolak `400`) dan tidak punya identitas default. Sebelum event pertama, `/presence` mengembalikan `unobserved` dengan identitas `null`. Lingkup MVP tetap satu bot: identitas event terakhir yang ditampilkan.
 
 ## Jalankan
 
@@ -49,7 +49,20 @@ Setelah doctor menampilkan lima hook terdaftar, restart gateway dari **Terminal 
 hermes gateway restart
 ```
 
-Jika `HERMES_HOME` tidak diekspor, gunakan root profil yang aktif (contoh profil Vega: `~/.hermes/profiles/vega`). Konfigurasi opsional: `PRESENCE_PORT`, `PRESENCE_TTL_MS`, `PRESENCE_HOST_ID`, `PRESENCE_ROOM_ID`, `PRESENCE_BOT_ID`, dan atribut pet `PRESENCE_PET_*`.
+Jika `HERMES_HOME` tidak diekspor, gunakan root profil yang aktif (contoh profil Atlas: `~/.hermes/profiles/atlas`).
+
+Identitas diatur lewat environment **proses Hermes (publisher)**. Default diturunkan dari nama profile aktif (basename `HERMES_HOME`, atau root profile tempat plugin terpasang):
+
+| Variabel | Default | Contoh Atlas |
+| --- | --- | --- |
+| `PRESENCE_HOST_ID` | hostname mesin | `macbook-ryan` |
+| `PRESENCE_ROOM_ID` | `build-room` | `build-room` |
+| `PRESENCE_BOT_ID` | nama profile | `atlas` |
+| `PRESENCE_PET_SLUG` | nama profile | `atlas` |
+| `PRESENCE_PET_VERSION` | `1.0.0` | `1.0.0` |
+| `PRESENCE_PET_URL` | `/pets/<slug>-v1.png` | `/pets/atlas-v1.png` |
+
+`PRESENCE_PET_URL` harus path root-relative atau URL http(s). Untuk nama tampilan lain, set misalnya `PRESENCE_BOT_ID=atlas-the-conductor` di environment gateway lalu restart gateway. Collector sendiri hanya membaca `PRESENCE_PORT` dan `PRESENCE_TTL_MS`.
 
 ## Verifikasi
 
@@ -59,4 +72,4 @@ python3 -m unittest hermes_plugin.presence_publisher.test_publisher
 npm run build
 ```
 
-Test collector membuktikan event hook → `presence.v1` → SSE dan TTL menghasilkan `unobserved`; test plugin membuktikan mapping lima hook native ke event collector yang diizinkan.
+Test collector membuktikan identitas arbitrer dari event → `presence.v1` → SSE dan `/presence`, event tanpa identitas ditolak, dan TTL menghasilkan `unobserved`; test plugin membuktikan mapping lima hook native, default identitas per profile, override environment, POST nyata berisi identitas, dan fail-open saat collector mati.
