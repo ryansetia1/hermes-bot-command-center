@@ -37,6 +37,9 @@ function identityOf(event) {
   return identity
 }
 
+// Optional last response text; omitted until a bot has sent one so older consumers see no change.
+const messageFields = ({ message, messageAt }) => (message ? { message, messageAt } : {})
+
 const noIdentity = { hostId: null, roomId: null, roomName: null, botId: null, pet: null }
 
 export const entityKey = ({ hostId, roomId, botId }) => `${hostId}:${roomId}:${botId}`
@@ -53,6 +56,7 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
       return {
         version: 'presence.v1',
         ...entity.identity,
+        ...messageFields(entity),
         state: 'unobserved',
         activity: entity.activity,
         updatedAt: entity.updatedAt,
@@ -62,6 +66,7 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
     return {
       version: 'presence.v1',
       ...entity.identity,
+      ...messageFields(entity),
       state: entity.state,
       activity: entity.activity,
       updatedAt: entity.updatedAt,
@@ -126,11 +131,16 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermes
       identity.roomName = existing.identity.roomName
     }
 
+    const hasMessage = typeof event.message === 'string' && event.message.trim() !== ''
+    const updatedAt = event.at ?? now().toISOString()
+
     entities.set(key, {
       identity,
+      message: hasMessage ? event.message : existing?.message,
+      messageAt: hasMessage ? updatedAt : existing?.messageAt,
       state,
       activity: defaultActivity(event, state),
-      updatedAt: event.at ?? now().toISOString(),
+      updatedAt,
     })
 
     scheduleExpiry(key)

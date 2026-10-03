@@ -10,7 +10,7 @@ Hermes native hooks → presence-publisher plugin → HTTP POST /observe
 Vite card ← SSE /events ← local collector ← TTL → unobserved
 ```
 
-Kontrak `presence.v1`: `hostId`, `roomId`, `roomName` (opsional, label tampilan), `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, serta `reason` saat tidak teramati. Identitas (`hostId`, `roomId`, `botId`, `pet`) **dikirim publisher di setiap event** dari profile Hermes yang aktif; collector memvalidasinya (event tanpa identitas lengkap ditolak `400`) dan tidak punya identitas default. Sebelum event pertama, `/presence` mengembalikan `unobserved` dengan identitas `null`. Lingkup MVP tetap satu bot: identitas event terakhir yang ditampilkan.
+Kontrak `presence.v1`: `hostId`, `roomId`, `roomName` (opsional, label tampilan), `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, serta `reason` saat tidak teramati. Opsional: `message` (teks respons terakhir bot, dari `assistant_response` hook `post_llm_call`, maks. 2000 karakter) dan `messageAt` (waktu event pesan); keduanya hanya muncul setelah ada pesan dan dipertahankan oleh event berikutnya serta snapshot `unobserved`. Identitas (`hostId`, `roomId`, `botId`, `pet`) **dikirim publisher di setiap event** dari profile Hermes yang aktif; collector memvalidasinya (event tanpa identitas lengkap ditolak `400`) dan tidak punya identitas default. Sebelum event pertama, `/presence` mengembalikan `unobserved` dengan identitas `null`. Lingkup MVP tetap satu bot: identitas event terakhir yang ditampilkan.
 
 ## Jalankan
 
@@ -72,3 +72,12 @@ npm run build
 ```
 
 Test collector membuktikan identitas arbitrer dari event → `presence.v1` → SSE dan `/presence`, event tanpa identitas ditolak, dan TTL menghasilkan `unobserved`; test plugin membuktikan mapping lima hook native, default identitas per profile, override environment, POST nyata berisi identitas, dan fail-open saat collector mati.
+
+
+## Memperbarui plugin yang terpasang
+
+Hermes memuat **salinan** plugin (`~/.hermes/plugins/presence_publisher` dan `~/.hermes/profiles/*/plugins/presence_publisher`), bukan folder repo ini. Setelah publisher berubah (mis. `message`, avatar), salin ulang lalu restart Hermes agar plugin dimuat ulang:
+
+```bash
+for d in ~/.hermes/plugins/presence_publisher ~/.hermes/profiles/*/plugins/presence_publisher; do cp hermes_plugin/presence_publisher/{publisher.py,__init__.py,plugin.yaml} "$d/"; done
+```

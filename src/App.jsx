@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePresence } from './PresenceProvider.jsx'
 import { DIRECT_ROOM_ID, deriveRooms } from './rooms.js'
+import { isUnread, useReadMarks } from './readMarks.js'
 import { isSheet, petSrc, sheetRow } from './petSprite.js'
 import { spreadPositions, wanderTarget } from './wander.js'
 
@@ -99,51 +100,76 @@ function LobbySection({ title, rooms, onOpen, emptyText }) {
   )
 }
 
-function Sprite({ bot, spot, onDismiss, onSelect }) {
+const botKey = (bot) => `${bot.hostId}:${bot.roomId}:${bot.botId}`
+
+function Sprite({ bot, spot, unread, onSelect }) {
   const status = stateCopy[bot.state] || stateCopy.unobserved
-  const key = `${bot.hostId}:${bot.roomId}:${bot.botId}`
+  const key = botKey(bot)
+  const typing = bot.state === 'working' || bot.state === 'speaking'
   const [position, setPosition] = useState({ ...spot, flip: false })
   const positionRef = useRef(position)
   positionRef.current = position
-  const idle = bot.state === 'idle'
+  // A bot with an unread reply stays put so it is easy to click; it resumes wandering once read.
+  const wanders = bot.state === 'idle' && !unread
 
   useEffect(() => {
-    if (!idle || prefersReducedMotion()) return undefined
+    if (!wanders || prefersReducedMotion()) return undefined
     const timer = setInterval(() => {
       const target = wanderTarget()
       setPosition({ ...target, flip: target.x < positionRef.current.x })
     }, WANDER_MS + Math.random() * 2_000)
     return () => clearInterval(timer)
-  }, [idle])
+  }, [wanders])
 
   return (
     <div className={`sprite ${status.tone}`} style={{ left: `${position.x}%`, top: `${position.y}%` }}>
+      {typing && <span className="typing-bubble" aria-hidden="true"><i /><i /><i /></span>}
+      {unread && <span className="unread-badge" aria-hidden="true">✉</span>}
       <button
         type="button"
         className="sprite-btn"
-        aria-label={`${bot.botId}: ${status.label}`}
-        onClick={() => onSelect?.(key)}
+        data-key={key}
+        aria-label={`${bot.botId}: ${status.label}${typing ? ', typing' : ''}${unread ? ', unread message' : ''}`}
+        onClick={() => onSelect(key)}
       >
         <span className={`sprite-body${position.flip ? ' flipped' : ''}`}>
           <Pet pet={bot.pet} botId={bot.botId} state={bot.state} />
         </span>
       </button>
-      {onDismiss && (
-        <button
-          type="button"
-          className="btn-card-dismiss"
-          onClick={() => onDismiss(key)}
-          title="Dismiss bot"
-          aria-label={`Dismiss ${bot.botId}`}
-        >
-          ×
-        </button>
-      )}
     </div>
   )
 }
 
-function RoomScene({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
+function Dialog({ bot, onClose }) {
+  const status = stateCopy[bot.state] || stateCopy.unobserved
+  const closeRef = useRef(null)
+  useEffect(() => {
+    closeRef.current?.focus()
+    const onKey = (event) => event.key === 'Escape' && onClose()
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="vn-dialog" role="dialog" aria-label={`${bot.botId} message`}>
+      <div className="vn-portrait"><Pet pet={bot.pet} botId={bot.botId} state={bot.state} /></div>
+      <div className="vn-head">
+        <span className="vn-name">{bot.botId}</span>
+        <span className={`pill pill-${status.tone}`}>{status.label}</span>
+        <span className="vn-age">{secondsAgo(bot.updatedAt)}</span>
+        <button type="button" className="vn-btn" ref={closeRef} onClick={onClose} aria-label="Close dialog">×</button>
+      </div>
+      <p className="vn-text">{bot.message ?? `No message yet. ${bot.activity ?? ''}`}</p>
+      {bot.message && bot.reason && <p className="vn-age">{bot.reason}</p>}
+    </div>
+  )
+}
+
+function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissRoom }) {
+  const [openKey, setOpenKey] = useState(null)
+  const floorRef = useRef(null)
+  const openKeyRef = useRef(null)
+  openKeyRef.current = openKey ?? openKeyRef.current
   const sortedBots = [...bots].sort((a, b) => {
     const prioA = STATE_PRIORITY[a.state] ?? 99
     const prioB = STATE_PRIORITY[b.state] ?? 99
@@ -151,6 +177,19 @@ function RoomScene({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
     return (a.botId || '').localeCompare(b.botId || '')
   })
   const spots = spreadPositions(sortedBots.length)
+  const openBot = bots.find((bot) => botKey(bot) === openKey)
+  const openMessageAt = openBot?.messageAt
+
+  // Opening, and any new message while open, counts as read.
+  useEffect(() => {
+    if (openKey && openMessageAt) onRead(openKey, openMessageAt)
+  }, [openKey, openMessageAt, onRead])
+
+  const closeDialog = useCallback(() => {
+    setOpenKey(null)
+    // The sprite that opened the dialog gets focus back once the dialog is gone.
+    requestAnimationFrame(() => floorRef.current?.querySelector(`[data-key="${CSS.escape(openKeyRef.current)}"]`)?.focus())
+  }, [])
   const displayName = roomName || (roomId === DIRECT_ROOM_ID ? '1o1 room' : roomId)
 
   return (
@@ -172,10 +211,20 @@ function RoomScene({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
           </button>
         )}
       </div>
-      <div className="scene-floor">
+      <div className="scene-floor" ref={floorRef}>
+        {openBot && <div className="vn-backdrop" onClick={closeDialog} />}
         {sortedBots.map((bot, i) => (
-          <Sprite key={`${bot.hostId}:${bot.roomId}:${bot.botId}`} bot={bot} spot={spots[i]} onDismiss={onDismissBot} />
+          <Sprite
+            key={botKey(bot)}
+            bot={bot}
+            spot={spots[i]}
+            unread={isUnread(bot.messageAt, readMarks[botKey(bot)])}
+            onSelect={setOpenKey}
+          />
         ))}
+        {openBot && (
+          <Dialog bot={openBot} onClose={closeDialog} />
+        )}
       </div>
     </section>
   )
@@ -185,6 +234,7 @@ export default function App() {
   const presence = usePresence()
   const [dismissedKeys, setDismissedKeys] = useState(new Set())
   const [selected, setSelected] = useState(null)
+  const [readMarks, markRead] = useReadMarks()
 
   if (!presence) {
     return (
@@ -207,11 +257,6 @@ export default function App() {
     if (b.roomId === 'build-room' && b.botId === 'default' && b.state === 'unobserved') return false
     return true
   })
-
-  const handleDismissBot = (key) => {
-    setDismissedKeys((prev) => new Set([...prev, key]))
-    fetch(`/presence?key=${encodeURIComponent(key)}`, { method: 'DELETE' }).catch(() => {})
-  }
 
   const handleDismissRoom = (roomId) => {
     const keysInRoom = rawEntities
@@ -310,7 +355,8 @@ export default function App() {
             roomId={selectedRoom.roomId}
             roomName={selectedRoom.roomName}
             bots={selectedRoom.bots}
-            onDismissBot={handleDismissBot}
+            readMarks={readMarks}
+            onRead={markRead}
             onDismissRoom={selectedRoom.roomId === DIRECT_ROOM_ID ? undefined : handleDismissRoom}
           />
         </div>
