@@ -531,6 +531,8 @@ footer {
   height: 36px;
 }
 
+.room-tile-members .pet-sheet { --w: 36px; --h: 39px; }
+
 .coming-soon {
   border-style: dashed;
   opacity: 0.6;
@@ -639,4 +641,29 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   .sprite { transition: none; }
   .sprite .sprite-btn { animation: none !important; }
+}
+
+/* Hermes pet sheet: 8 x 9 grid of 192x208 frames; 6 frames per row, stepped across the row. */
+.pet-sheet {
+  --w: 96px;
+  --h: 104px;
+  width: var(--w);
+  height: var(--h);
+  background-size: calc(var(--w) * 8) calc(var(--h) * 9);
+  background-position: 0 calc(var(--h) * var(--row) * -1);
+  background-repeat: no-repeat;
+  animation: pet-frames 0.9s steps(6) infinite;
+}
+
+.pet-sheet.pet-static { animation: none; filter: grayscale(1); }
+.pet-probe { display: none; }
+
+@keyframes pet-frames { to { background-position-x: calc(var(--w) * -6); } }
+
+@media (max-width: 640px) {
+  .pet-sheet { --w: 72px; --h: 78px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-sheet { animation: none; }
 }

@@ -8,6 +8,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/presence': `http://127.0.0.1:${presencePort}`,
+      '/hermes-pets': `http://127.0.0.1:${presencePort}`,
+      '/hermes-avatars': `http://127.0.0.1:${presencePort}`,
       '/events': `http://127.0.0.1:${presencePort}`,
     },
   },

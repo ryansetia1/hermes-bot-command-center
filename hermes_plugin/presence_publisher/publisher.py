@@ -7,9 +7,10 @@ Identity sent with every event (presence.v1), defaults derived from the active p
   PRESENCE_ROOM_ID     default: dynamically resolved (fallback: direct)
   PRESENCE_ROOM_NAME   default: dynamically resolved
   PRESENCE_BOT_ID      default: <profile>
-  PRESENCE_PET_SLUG    default: <profile>
-  PRESENCE_PET_VERSION default: 1.0.0
-  PRESENCE_PET_URL     default: /pets/<pet slug>-v1.png
+  PRESENCE_PET_SLUG    default: display.pet.slug of the profile config.yaml, else <profile>
+  PRESENCE_PET_VERSION default: spritesheet mtime of that Hermes pet, else 1.0.0
+  PRESENCE_PET_URL     default: /hermes-pets/<profile>/<slug>/<sheet> served by the collector,
+                       else /pets/<pet slug>-v1.png
 The publisher is observer-only and fail-open: a stopped dashboard cannot interrupt Hermes.
 """
 from __future__ import annotations
@@ -431,9 +432,58 @@ def _profile(profile: str | None = None, **kwargs) -> str:
     return "default" if home.name == ".hermes" else home.name
 
 
+_SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _profile_home(profile: str) -> Path:
+    home = os.getenv("HERMES_HOME")
+    if home and Path(home).name == profile:
+        return Path(home)
+    root = Path.home() / ".hermes"
+    return root if profile == "default" else root / "profiles" / profile
+
+
+def _configured_pet(home: Path, config: dict, profile: str) -> dict | None:
+    """The sheet of display.pet.slug: the profile's own pets first, then the shared ~/.hermes/pets."""
+    slug = config.get("slug")
+    if not isinstance(slug, str) or not _SAFE_SEGMENT.match(slug):
+        return None
+    sheet = next((f for h in (home, Path.home() / ".hermes") for f in (h / "pets" / slug).glob("spritesheet.*")
+                  if f.suffix in (".webp", ".png")), None)  # formats the collector serves
+    if sheet is None:
+        return None
+    return {"slug": slug, "version": str(sheet.stat().st_mtime_ns), "url": f"/hermes-pets/{profile}/{slug}/{sheet.name}"}
+
+
+def _hermes_pet(profile: str) -> dict | None:
+    """The sprite Hermes shows for this profile, or None. Read on every event, never cached.
+
+    An enabled desktop pet wins; otherwise the profile's own avatar (distinct per bot); otherwise a
+    configured-but-disabled pet sheet."""
+    try:
+        if not _SAFE_SEGMENT.match(profile):
+            return None
+        home = _profile_home(profile)
+        try:
+            import yaml
+            config = (yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8")) or {})["display"]["pet"]
+        except Exception:
+            config = {}
+        pet = _configured_pet(home, config, profile)
+        if pet and config.get("enabled") is True:
+            return pet
+        avatar = home / "assets" / "avatar.png"
+        if avatar.is_file():
+            return {"slug": f"{profile}-avatar", "version": str(avatar.stat().st_mtime_ns), "url": f"/hermes-avatars/{profile}/avatar.png"}
+        return pet
+    except Exception:
+        return None
+
+
 def identity(room_id: str | None = None, **kwargs) -> dict:
     profile = _clean_str(kwargs.get("profile")) or _clean_str(_CURRENT_PROFILE) or _profile(**kwargs)
-    slug = os.getenv("PRESENCE_PET_SLUG") or profile
+    hermes_pet = {} if os.getenv("PRESENCE_PET_SLUG") else _hermes_pet(profile) or {}
+    slug = os.getenv("PRESENCE_PET_SLUG") or hermes_pet.get("slug") or profile
     effective_room, effective_room_name = resolve_room_info(room_id=room_id, **kwargs)
     return {
         "hostId": os.getenv("PRESENCE_HOST_ID") or "default",
@@ -442,8 +492,8 @@ def identity(room_id: str | None = None, **kwargs) -> dict:
         "botId": os.getenv("PRESENCE_BOT_ID") or profile,
         "pet": {
             "slug": slug,
-            "version": os.getenv("PRESENCE_PET_VERSION") or "1.0.0",
-            "url": os.getenv("PRESENCE_PET_URL") or f"/pets/{slug}-v1.png",
+            "version": os.getenv("PRESENCE_PET_VERSION") or hermes_pet.get("version") or "1.0.0",
+            "url": os.getenv("PRESENCE_PET_URL") or hermes_pet.get("url") or f"/pets/{slug}-v1.png",
         },
     }
 

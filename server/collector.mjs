@@ -1,4 +1,7 @@
 import { createServer } from 'node:http'
+import { readFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
 const stateForEvent = {
   'gateway:received': 'working',
@@ -16,6 +19,9 @@ function defaultActivity(event, state) {
   if (state === 'error') return 'Native lifecycle reported an error'
   return 'Processing native lifecycle event'
 }
+
+const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
+const PET_FILES = { 'pet.json': 'application/json', 'spritesheet.webp': 'image/webp', 'spritesheet.png': 'image/png' }
 
 const isText = (value) => typeof value === 'string' && value.trim() !== ''
 
@@ -35,7 +41,7 @@ const noIdentity = { hostId: null, roomId: null, roomName: null, botId: null, pe
 
 export const entityKey = ({ hostId, roomId, botId }) => `${hostId}:${roomId}:${botId}`
 
-export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {}) {
+export function createCollector({ ttlMs = 30_000, now = () => new Date(), hermesHome = process.env.HERMES_HOME_DIR || join(homedir(), '.hermes') } = {}) {
   const entities = new Map()
   const expiryTimers = new Map()
   let latestKey = null
@@ -161,11 +167,55 @@ export function createCollector({ ttlMs = 30_000, now = () => new Date() } = {})
     return deletedCount
   }
 
+  // GET /hermes-pets/<profile>/<slug>/<file>: read-only; every segment is validated, so no path traversal.
+  async function servePet(pathname, response) {
+    const [, , profile, slug, file, ...extra] = pathname.split('/')
+    const contentType = PET_FILES[file]
+    if (extra.length || !contentType || ![profile, slug].every((segment) => SAFE_SEGMENT.test(segment))) {
+      response.writeHead(400).end()
+      return
+    }
+    const profileHome = profile === 'default' ? hermesHome : join(hermesHome, 'profiles', profile)
+    // The profile's own pets first, then the shared pets dir of the Hermes root.
+    for (const home of [profileHome, hermesHome]) {
+      try {
+        const body = await readFile(join(home, 'pets', slug, file))
+        response.writeHead(200, { 'content-type': contentType, 'cache-control': 'no-cache' }).end(body)
+        return
+      } catch { /* try the next location */ }
+    }
+    response.writeHead(404).end()
+  }
+
+  // GET /hermes-avatars/<profile>/avatar.png: the profile's own avatar image.
+  async function serveAvatar(pathname, response) {
+    const [, , profile, file, ...extra] = pathname.split('/')
+    if (extra.length || file !== 'avatar.png' || !SAFE_SEGMENT.test(profile)) {
+      response.writeHead(400).end()
+      return
+    }
+    const profileHome = profile === 'default' ? hermesHome : join(hermesHome, 'profiles', profile)
+    try {
+      const body = await readFile(join(profileHome, 'assets', file))
+      response.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-cache' }).end(body)
+    } catch {
+      response.writeHead(404).end()
+    }
+  }
+
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1')
     if (request.method === 'GET' && url.pathname === '/presence') {
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
       response.end(JSON.stringify(getPresence()))
+      return
+    }
+    if (request.method === 'GET' && url.pathname.startsWith('/hermes-pets/')) {
+      await servePet(url.pathname, response)
+      return
+    }
+    if (request.method === 'GET' && url.pathname.startsWith('/hermes-avatars/')) {
+      await serveAvatar(url.pathname, response)
       return
     }
     if (request.method === 'GET' && url.pathname === '/events') {

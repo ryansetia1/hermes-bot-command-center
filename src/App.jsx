@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePresence } from './PresenceProvider.jsx'
 import { DIRECT_ROOM_ID, deriveRooms } from './rooms.js'
+import { isSheet, petSrc, sheetRow } from './petSprite.js'
 import { spreadPositions, wanderTarget } from './wander.js'
 
 const WANDER_MS = 4_000
@@ -30,18 +31,32 @@ function secondsAgo(updatedAt) {
   return `Updated ${minutes}m ${seconds % 60}s ago`
 }
 
-function Pet({ pet, botId }) {
-  const [failed, setFailed] = useState(false)
-  if (failed || !pet?.url) {
+function Pet({ pet, botId, state }) {
+  const src = pet?.url ? petSrc(pet) : null
+  const [failedSrc, setFailedSrc] = useState(null)
+  if (!src || failedSrc === src) {
     const initials = (botId || 'bot').slice(0, 2).toUpperCase()
     return <div className="pet-fallback" aria-label={`${botId} avatar`}>{initials}</div>
+  }
+  if (isSheet(pet)) {
+    return (
+      <>
+        <div
+          className={`pet-sheet${state === 'unobserved' ? ' pet-static' : ''}`}
+          role="img"
+          aria-label={`${pet.slug || botId} avatar`}
+          style={{ backgroundImage: `url("${src}")`, '--row': sheetRow(state) }}
+        />
+        <img className="pet-probe" src={src} alt="" onError={() => setFailedSrc(src)} />
+      </>
+    )
   }
   return (
     <img
       className="pet"
-      src={pet.url}
+      src={src}
       alt={`${pet.slug || botId} avatar`}
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(src)}
     />
   )
 }
@@ -54,7 +69,7 @@ function RoomTile({ room, onOpen }) {
       <span className="room-tile-name">{room.roomName}</span>
       <span className="room-tile-members">
         {room.bots.map((bot) => (
-          <Pet key={`${bot.hostId}:${bot.botId}`} pet={bot.pet} botId={bot.botId} />
+          <Pet key={`${bot.hostId}:${bot.botId}`} pet={bot.pet} botId={bot.botId} state={bot.state} />
         ))}
       </span>
       <span className="room-pills">
@@ -110,7 +125,7 @@ function Sprite({ bot, spot, onDismiss, onSelect }) {
         onClick={() => onSelect?.(key)}
       >
         <span className={`sprite-body${position.flip ? ' flipped' : ''}`}>
-          <Pet pet={bot.pet} botId={bot.botId} />
+          <Pet pet={bot.pet} botId={bot.botId} state={bot.state} />
         </span>
       </button>
       {onDismiss && (
