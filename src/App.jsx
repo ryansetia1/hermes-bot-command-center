@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePresence } from './PresenceProvider.jsx'
 import { DIRECT_ROOM_ID, deriveRooms } from './rooms.js'
+import { spreadPositions, wanderTarget } from './wander.js'
+
+const WANDER_MS = 4_000
+const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 const stateCopy = {
   idle: { label: 'Idle', description: 'Ready for work', tone: 'idle' },
@@ -80,11 +84,35 @@ function LobbySection({ title, rooms, onOpen, emptyText }) {
   )
 }
 
-function Sprite({ bot, onDismiss }) {
+function Sprite({ bot, spot, onDismiss, onSelect }) {
   const status = stateCopy[bot.state] || stateCopy.unobserved
   const key = `${bot.hostId}:${bot.roomId}:${bot.botId}`
+  const [position, setPosition] = useState({ ...spot, flip: false })
+  const positionRef = useRef(position)
+  positionRef.current = position
+  const idle = bot.state === 'idle'
+
+  useEffect(() => {
+    if (!idle || prefersReducedMotion()) return undefined
+    const timer = setInterval(() => {
+      const target = wanderTarget()
+      setPosition({ ...target, flip: target.x < positionRef.current.x })
+    }, WANDER_MS + Math.random() * 2_000)
+    return () => clearInterval(timer)
+  }, [idle])
+
   return (
-    <article className={`sprite ${status.tone}`} aria-label={`${bot.botId}: ${status.label}`}>
+    <div className={`sprite ${status.tone}`} style={{ left: `${position.x}%`, top: `${position.y}%` }}>
+      <button
+        type="button"
+        className="sprite-btn"
+        aria-label={`${bot.botId}: ${status.label}`}
+        onClick={() => onSelect?.(key)}
+      >
+        <span className={`sprite-body${position.flip ? ' flipped' : ''}`}>
+          <Pet pet={bot.pet} botId={bot.botId} />
+        </span>
+      </button>
       {onDismiss && (
         <button
           type="button"
@@ -96,15 +124,7 @@ function Sprite({ bot, onDismiss }) {
           ×
         </button>
       )}
-      <p className="sprite-bubble">{bot.activity ?? '…'}</p>
-      <div className="sprite-body">
-        <Pet pet={bot.pet} botId={bot.botId} />
-      </div>
-      <h3 className="sprite-name">{bot.botId}</h3>
-      <span className={`pill pill-${status.tone}`}>{status.label}</span>
-      <p className="sprite-age">{secondsAgo(bot.updatedAt)}</p>
-      {bot.reason && <p className="sprite-age">{bot.reason}</p>}
-    </article>
+    </div>
   )
 }
 
@@ -115,6 +135,7 @@ function RoomScene({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
     if (prioA !== prioB) return prioA - prioB
     return (a.botId || '').localeCompare(b.botId || '')
   })
+  const spots = spreadPositions(sortedBots.length)
   const displayName = roomName || (roomId === DIRECT_ROOM_ID ? '1o1 room' : roomId)
 
   return (
@@ -137,8 +158,8 @@ function RoomScene({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
         )}
       </div>
       <div className="scene-floor">
-        {sortedBots.map((bot) => (
-          <Sprite key={`${bot.hostId}:${bot.roomId}:${bot.botId}`} bot={bot} onDismiss={onDismissBot} />
+        {sortedBots.map((bot, i) => (
+          <Sprite key={`${bot.hostId}:${bot.roomId}:${bot.botId}`} bot={bot} spot={spots[i]} onDismiss={onDismissBot} />
         ))}
       </div>
     </section>
