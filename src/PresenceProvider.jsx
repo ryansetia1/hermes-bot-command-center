@@ -31,6 +31,24 @@ export function useRoster() {
   return roster
 }
 
+// Room chat history from the read-only collector endpoint, polled only while the sidebar is open.
+const MESSAGES_POLL_MS = 4_000
+export function useRoomMessages(roomId, enabled) {
+  const [state, setState] = useState({ roomId: null, messages: [], failed: false })
+  useEffect(() => {
+    if (!enabled) return undefined
+    let active = true
+    const load = () => fetch(`/rooms/${encodeURIComponent(roomId)}/messages?limit=100`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error('History unavailable')))
+      .then((data) => active && setState({ roomId, messages: data.messages, failed: false }))
+      .catch(() => active && setState({ roomId, messages: [], failed: true }))
+    load()
+    const timer = setInterval(load, MESSAGES_POLL_MS)
+    return () => { active = false; clearInterval(timer) }
+  }, [roomId, enabled])
+  return state.roomId === roomId ? state : { roomId, messages: [], failed: false }
+}
+
 export function usePresence() {
   const presence = useContext(PresenceContext)
   if (presence === undefined) throw new Error('usePresence must be used inside PresenceProvider')
