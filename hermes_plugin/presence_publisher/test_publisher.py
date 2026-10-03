@@ -99,6 +99,9 @@ class HermesPetTests(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {'HERMES_HOME': str(self.home)}, clear=True)
         self.env.start()
         self.addCleanup(self.env.stop)
+        home_patch = mock.patch.object(Path, 'home', return_value=Path(self.tmp.name) / 'nohome')  # isolate from the real ~/.hermes
+        home_patch.start()
+        self.addCleanup(home_patch.stop)
 
     def configure(self, slug, sheet='spritesheet.webp'):
         (self.home / 'config.yaml').write_text(f'display:\n  pet:\n    enabled: false\n    slug: {slug}\n')
@@ -122,6 +125,14 @@ class HermesPetTests(unittest.TestCase):
         self.assertNotEqual(before['version'], touched['version'])
         self.configure('otter')
         self.assertEqual(identity()['pet']['url'], '/hermes-pets/elio/otter/spritesheet.webp')
+
+    def test_falls_back_to_shared_hermes_pets(self):
+        shared = Path(self.tmp.name) / 'shared'
+        (shared / '.hermes' / 'pets' / 'ninjacat').mkdir(parents=True)
+        (shared / '.hermes' / 'pets' / 'ninjacat' / 'spritesheet.webp').write_bytes(b'sheet')
+        (self.home / 'config.yaml').write_text('display:\n  pet:\n    slug: ninjacat\n')
+        with mock.patch.object(Path, 'home', return_value=shared):
+            self.assertEqual(identity()['pet']['url'], '/hermes-pets/elio/ninjacat/spritesheet.webp')
 
     def test_env_overrides_win(self):
         self.configure('ninjacat')

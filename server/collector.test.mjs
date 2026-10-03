@@ -359,6 +359,7 @@ describe('GET /hermes-pets', () => {
     expect(sheet.headers.get('content-type')).toBe('image/webp')
     expect(await sheet.text()).toBe('sheet')
     expect((await get('/hermes-pets/default/ninjacat/pet.json')).status).toBe(200)
+    expect((await get('/hermes-pets/nobody/ninjacat/pet.json')).status).toBe(200) // falls back to the shared pets dir
   })
 
   it('rejects traversal, encoded slashes, unknown files and unknown profiles', async () => {
@@ -369,7 +370,7 @@ describe('GET /hermes-pets', () => {
       '/hermes-pets/elio/ninjacat/secret.txt',
       '/hermes-pets/elio/ninjacat/spritesheet.webp/extra',
       '/hermes-pets/nobody/ninjacat/spritesheet.webp',
-      '/hermes-pets/elio/ninjacat/pet.json',
+      '/hermes-pets/elio/ghost/pet.json',
     ].map(async (path) => (await get(path)).status))
     expect(statuses).toEqual([400, 400, 400, 400, 400, 404, 404])
   })
