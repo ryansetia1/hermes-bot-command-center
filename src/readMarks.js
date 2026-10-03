@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 
 const STORAGE_KEY = 'hermes-read-marks'
 
@@ -12,11 +12,11 @@ function load() {
 // Per-entity-key read state, kept client-side only (localStorage when available).
 export function useReadMarks() {
   const [marks, setMarks] = useState(load)
-  const markRead = (key, messageAt) => setMarks((prev) => {
+  const markRead = useCallback((key, messageAt) => setMarks((prev) => {
     if (prev[key] === messageAt) return prev
     const next = { ...prev, [key]: messageAt }
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch { /* private mode: in-memory only */ }
     return next
-  })
+  }), [])
   return [marks, markRead]
 }

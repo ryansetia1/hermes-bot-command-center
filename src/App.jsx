@@ -168,6 +168,8 @@ function Dialog({ bot, onClose, onDismiss }) {
 function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissBot, onDismissRoom }) {
   const [openKey, setOpenKey] = useState(null)
   const floorRef = useRef(null)
+  const openKeyRef = useRef(null)
+  openKeyRef.current = openKey ?? openKeyRef.current
   const sortedBots = [...bots].sort((a, b) => {
     const prioA = STATE_PRIORITY[a.state] ?? 99
     const prioB = STATE_PRIORITY[b.state] ?? 99
@@ -181,21 +183,14 @@ function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissBot, on
   // Opening, and any new message while open, counts as read.
   useEffect(() => {
     if (openKey && openMessageAt) onRead(openKey, openMessageAt)
-  }, [openKey, openMessageAt]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [openKey, openMessageAt, onRead])
 
-  const [returnFocusTo, setReturnFocusTo] = useState(null)
   const closeDialog = useCallback(() => {
-    setOpenKey((key) => { setReturnFocusTo(key); return null })
+    setOpenKey(null)
+    // The sprite that opened the dialog gets focus back once the dialog is gone.
+    requestAnimationFrame(() => floorRef.current?.querySelector(`[data-key="${CSS.escape(openKeyRef.current)}"]`)?.focus())
   }, [])
-
   const displayName = roomName || (roomId === DIRECT_ROOM_ID ? '1o1 room' : roomId)
-
-  // After the dialog unmounts, hand focus back to the sprite that opened it.
-  useEffect(() => {
-    if (!returnFocusTo || openKey) return
-    floorRef.current?.querySelector(`[data-key="${CSS.escape(returnFocusTo)}"]`)?.focus()
-    setReturnFocusTo(null)
-  }, [returnFocusTo, openKey])
 
   return (
     <section className="room-scene" aria-labelledby={`room-title-${roomId}`}>
