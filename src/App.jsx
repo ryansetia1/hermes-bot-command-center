@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { usePresence } from './PresenceProvider.jsx'
+import { DIRECT_ROOM_ID, deriveRooms } from './rooms.js'
 
 const stateCopy = {
   idle: { label: 'Idle', description: 'Ready for work', tone: 'idle' },
@@ -108,6 +109,44 @@ function BotCard({ bot, onDismiss }) {
   )
 }
 
+const PILL_STATES = ['speaking', 'working', 'idle', 'error', 'unobserved']
+
+function RoomTile({ room, onOpen }) {
+  return (
+    <button type="button" className="room-tile" onClick={() => onOpen(room)}>
+      <span className="room-tile-name">{room.roomName}</span>
+      <span className="room-tile-members">
+        {room.bots.map((bot) => (
+          <Pet key={`${bot.hostId}:${bot.botId}`} pet={bot.pet} botId={bot.botId} />
+        ))}
+      </span>
+      <span className="room-pills">
+        {PILL_STATES.map((state) => {
+          const count = room.bots.filter((b) => b.state === state).length
+          return count > 0 && <span key={state} className={`pill pill-${state}`}>{count} {state}</span>
+        })}
+      </span>
+    </button>
+  )
+}
+
+function LobbySection({ title, rooms, onOpen, emptyText }) {
+  return (
+    <section className="lobby-section">
+      <h2 className="lobby-title">{title}</h2>
+      {rooms.length === 0 ? (
+        <p className="intro">{emptyText}</p>
+      ) : (
+        <div className="room-tile-grid">
+          {rooms.map((room) => (
+            <RoomTile key={room.id} room={room} onOpen={onOpen} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 function RoomSection({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
   // Sort bots: speaking first, working second, then error, idle, and unobserved
   const sortedBots = [...bots].sort((a, b) => {
@@ -128,7 +167,7 @@ function RoomSection({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
     unobserved: bots.filter((b) => b.state === 'unobserved').length,
   }
 
-  const displayName = roomName || bots[0]?.roomName || (roomId === 'direct' ? 'Direct' : roomId)
+  const displayName = roomName || bots[0]?.roomName || (roomId === DIRECT_ROOM_ID ? '1o1 room' : roomId)
   const isCustomName = Boolean(displayName && displayName !== roomId && displayName !== `#${roomId}`)
 
   return (
@@ -187,6 +226,7 @@ function RoomSection({ roomId, roomName, bots, onDismissBot, onDismissRoom }) {
 export default function App() {
   const presence = usePresence()
   const [dismissedKeys, setDismissedKeys] = useState(new Set())
+  const [selected, setSelected] = useState(null)
 
   if (!presence) {
     return (
@@ -247,31 +287,18 @@ export default function App() {
     )
   }
 
-  // Group entities by roomId
-  const roomsMap = new Map()
-  for (const entity of rawEntities) {
-    const roomId = entity.roomId || 'direct'
-    if (!roomsMap.has(roomId)) {
-      roomsMap.set(roomId, {
-        roomId,
-        roomName: entity.roomName || (roomId === 'direct' ? 'Direct' : roomId),
-        bots: [],
-      })
-    }
-    const room = roomsMap.get(roomId)
-    if (entity.roomName && (!room.roomName || room.roomName === roomId)) {
-      room.roomName = entity.roomName
-    }
-    room.bots.push(entity)
-  }
-
-  // Sort rooms by priority of contained bots: speaking/working rooms first
-  const sortedRooms = Array.from(roomsMap.values()).sort((roomA, roomB) => {
+  // Rooms with speaking/working bots first
+  const byPriority = (roomA, roomB) => {
     const minPrioA = Math.min(...roomA.bots.map((b) => STATE_PRIORITY[b.state] ?? 99))
     const minPrioB = Math.min(...roomB.bots.map((b) => STATE_PRIORITY[b.state] ?? 99))
     if (minPrioA !== minPrioB) return minPrioA - minPrioB
-    return (roomA.roomName || roomA.roomId).localeCompare(roomB.roomName || roomB.roomId)
-  })
+    return roomA.roomName.localeCompare(roomB.roomName)
+  }
+  const derived = deriveRooms(rawEntities)
+  const groupRooms = derived.groupRooms.sort(byPriority)
+  const oneOnOneRooms = derived.oneOnOneRooms.sort(byPriority)
+  const openRoom = (room) => setSelected(room.id)
+  const selectedRoom = selected && [...groupRooms, ...oneOnOneRooms].find((r) => r.id === selected)
 
   const primaryHost = presence.hostId || rawEntities[0]?.hostId || 'default'
   const totalBots = rawEntities.length
@@ -293,7 +320,7 @@ export default function App() {
           </div>
           <div className="metric">
             <span className="metric-label">ROOMS</span>
-            <strong className="metric-val">{sortedRooms.length}</strong>
+            <strong className="metric-val">{groupRooms.length + oneOnOneRooms.length}</strong>
           </div>
           <div className="metric">
             <span className="metric-label">BOTS</span>
@@ -316,18 +343,42 @@ export default function App() {
         </div>
       </header>
 
-      <div className="rooms-container">
-        {sortedRooms.map((room) => (
+      {selectedRoom ? (
+        <div className="rooms-container">
+          <button type="button" className="btn-back" onClick={() => setSelected(null)}>
+            ← Back to lobby
+          </button>
           <RoomSection
-            key={room.roomId}
-            roomId={room.roomId}
-            roomName={room.roomName}
-            bots={room.bots}
+            roomId={selectedRoom.roomId}
+            roomName={selectedRoom.roomName}
+            bots={selectedRoom.bots}
             onDismissBot={handleDismissBot}
-            onDismissRoom={handleDismissRoom}
+            onDismissRoom={selectedRoom.roomId === DIRECT_ROOM_ID ? undefined : handleDismissRoom}
           />
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="lobby">
+          <LobbySection
+            title="Group chat rooms"
+            rooms={groupRooms}
+            onOpen={openRoom}
+            emptyText="No group chat rooms yet."
+          />
+          <LobbySection
+            title="1o1 rooms"
+            rooms={oneOnOneRooms}
+            onOpen={openRoom}
+            emptyText="No 1o1 rooms yet."
+          />
+          <section className="lobby-section">
+            <h2 className="lobby-title">Discord &amp; Telegram</h2>
+            <div className="room-tile coming-soon" aria-disabled="true">
+              <span className="room-tile-name">Coming soon</span>
+              <span className="intro">Discord and Telegram rooms will appear here.</span>
+            </div>
+          </section>
+        </div>
+      )}
 
       <p className="footnote">
         Published from native gateway, LLM, and tool lifecycle events — never UI scraping or synthetic heartbeats.
