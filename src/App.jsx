@@ -140,7 +140,7 @@ function Sprite({ bot, spot, unread, onSelect }) {
   )
 }
 
-function Dialog({ bot, onClose, onDismiss }) {
+function Dialog({ bot, onClose }) {
   const status = stateCopy[bot.state] || stateCopy.unobserved
   const closeRef = useRef(null)
   useEffect(() => {
@@ -157,7 +157,6 @@ function Dialog({ bot, onClose, onDismiss }) {
         <span className="vn-name">{bot.botId}</span>
         <span className={`pill pill-${status.tone}`}>{status.label}</span>
         <span className="vn-age">{secondsAgo(bot.updatedAt)}</span>
-        <button type="button" className="vn-btn" onClick={() => onDismiss(botKey(bot))}>Dismiss bot</button>
         <button type="button" className="vn-btn" ref={closeRef} onClick={onClose} aria-label="Close dialog">×</button>
       </div>
       <p className="vn-text">{bot.message ?? `No message yet. ${bot.activity ?? ''}`}</p>
@@ -166,7 +165,7 @@ function Dialog({ bot, onClose, onDismiss }) {
   )
 }
 
-function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissBot, onDismissRoom }) {
+function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissRoom }) {
   const [openKey, setOpenKey] = useState(null)
   const floorRef = useRef(null)
   const openKeyRef = useRef(null)
@@ -224,11 +223,7 @@ function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissBot, on
           />
         ))}
         {openBot && (
-          <Dialog
-            bot={openBot}
-            onClose={closeDialog}
-            onDismiss={(key) => { setOpenKey(null); onDismissBot(key) }}
-          />
+          <Dialog bot={openBot} onClose={closeDialog} />
         )}
       </div>
     </section>
@@ -262,11 +257,6 @@ export default function App() {
     if (b.roomId === 'build-room' && b.botId === 'default' && b.state === 'unobserved') return false
     return true
   })
-
-  const handleDismissBot = (key) => {
-    setDismissedKeys((prev) => new Set([...prev, key]))
-    fetch(`/presence?key=${encodeURIComponent(key)}`, { method: 'DELETE' }).catch(() => {})
-  }
 
   const handleDismissRoom = (roomId) => {
     const keysInRoom = rawEntities
@@ -367,7 +357,6 @@ export default function App() {
             bots={selectedRoom.bots}
             readMarks={readMarks}
             onRead={markRead}
-            onDismissBot={handleDismissBot}
             onDismissRoom={selectedRoom.roomId === DIRECT_ROOM_ID ? undefined : handleDismissRoom}
           />
         </div>
