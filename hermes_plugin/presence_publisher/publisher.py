@@ -1,6 +1,14 @@
 """Publish Hermes lifecycle hooks to the local presence collector.
 
 Configuration: PRESENCE_COLLECTOR_URL (default http://127.0.0.1:8787/observe).
+Identity sent with every event (presence.v1), defaults derived from the active profile
+(basename of HERMES_HOME, else the profile root this plugin is installed under):
+  PRESENCE_HOST_ID   default: this machine's hostname
+  PRESENCE_ROOM_ID   default: build-room
+  PRESENCE_BOT_ID    default: <profile>
+  PRESENCE_PET_SLUG  default: <profile>
+  PRESENCE_PET_VERSION default: 1.0.0
+  PRESENCE_PET_URL   default: /pets/<pet slug>-v1.png
 The publisher is observer-only and fail-open: a stopped dashboard cannot interrupt Hermes.
 """
 from __future__ import annotations
@@ -8,12 +16,35 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import os
+from pathlib import Path
+import socket
 from queue import Full, Queue
 from threading import Thread
 from urllib.request import Request, urlopen
 
 _ENDPOINT = os.getenv("PRESENCE_COLLECTOR_URL", "http://127.0.0.1:8787/observe")
 _QUEUE: Queue[dict] = Queue(maxsize=128)
+
+
+def _profile() -> str:
+    # Installed at $HERMES_HOME/plugins/presence_publisher/publisher.py.
+    home = Path(os.getenv("HERMES_HOME") or Path(__file__).resolve().parents[2])
+    return "default" if home.name == ".hermes" else home.name
+
+
+def identity() -> dict:
+    profile = _profile()
+    slug = os.getenv("PRESENCE_PET_SLUG") or profile
+    return {
+        "hostId": os.getenv("PRESENCE_HOST_ID") or socket.gethostname().split(".")[0],
+        "roomId": os.getenv("PRESENCE_ROOM_ID") or "build-room",
+        "botId": os.getenv("PRESENCE_BOT_ID") or profile,
+        "pet": {
+            "slug": slug,
+            "version": os.getenv("PRESENCE_PET_VERSION") or "1.0.0",
+            "url": os.getenv("PRESENCE_PET_URL") or f"/pets/{slug}-v1.png",
+        },
+    }
 
 
 def event_for_hook(hook_name: str, **kwargs):
@@ -58,8 +89,16 @@ def _send_loop() -> None:
 
 
 def publish(hook_name: str, **kwargs) -> None:
+    try:
+        _enqueue(hook_name, **kwargs)
+    except Exception:
+        pass  # observer-only: never break the hook caller
+
+
+def _enqueue(hook_name: str, **kwargs) -> None:
     source, event_type = event_for_hook(hook_name, **kwargs)
     event = {
+        **identity(),
         "source": source,
         "type": event_type,
         "at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
