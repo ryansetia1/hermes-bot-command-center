@@ -153,7 +153,7 @@ function RoomSidebar({ roomId }) {
     <aside className="room-sidebar" id={`room-sidebar-${roomId}`} aria-label="Room messages">
       <ol className="room-log" ref={listRef} tabIndex={0} aria-label="Messages, oldest first">
         {messages.map((message, index) => (
-          <li key={`${index}:${message.id}`} className={`log-entry log-${message.from.kind}`}>
+          <li key={`${index}:${message.id}`} className={message.from.kind === 'user' ? 'log-entry log-user' : 'log-entry'}>
             <span className="log-head"><strong>{message.from.name || message.from.kind || 'unknown'}</strong> <time>{clockTime(message.at)}</time></span>
             <span className="log-text">{message.text}</span>
           </li>
