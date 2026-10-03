@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { usePresence } from './PresenceProvider.jsx'
-import { DIRECT_ROOM_ID, deriveRooms } from './rooms.js'
+import { usePresence, useRoster } from './PresenceProvider.jsx'
+import { DIRECT_ROOM_ID, deriveRooms, mergeRoster } from './rooms.js'
 import { isUnread, useReadMarks } from './readMarks.js'
 import { isSheet, petSrc, sheetRow } from './petSprite.js'
 import { spreadPositions, wanderTarget } from './wander.js'
@@ -232,6 +232,7 @@ function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissRoom })
 
 export default function App() {
   const presence = usePresence()
+  const roster = useRoster()
   const [dismissedKeys, setDismissedKeys] = useState(new Set())
   const [selected, setSelected] = useState(null)
   const [readMarks, markRead] = useReadMarks()
@@ -250,7 +251,7 @@ export default function App() {
     ? presence.entities
     : (presence.botId ? [presence] : [])
 
-  const rawEntities = allEntities.filter((b) => {
+  const rawEntities = mergeRoster(allEntities, roster).filter((b) => {
     const key = `${b.hostId}:${b.roomId}:${b.botId}`
     if (dismissedKeys.has(key)) return false
     // Filter out stale test artifact: default bot in build-room when unobserved
