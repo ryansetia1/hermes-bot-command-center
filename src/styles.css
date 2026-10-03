@@ -548,3 +548,85 @@ footer {
   border-radius: 8px;
   cursor: pointer;
 }
+
+/* Room scene */
+.room-scene {
+  display: grid;
+  gap: 16px;
+}
+
+.scene-floor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px 20px;
+  justify-content: center;
+  padding: 48px 24px 32px;
+  background:
+    linear-gradient(#1d2824 0 62%, #2a2418 62% 100%);
+  border: 2px solid #34463d;
+  border-radius: 16px;
+}
+
+.sprite {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 170px;
+}
+
+.sprite .btn-card-dismiss {
+  position: absolute;
+  top: -8px;
+  right: 4px;
+}
+
+.sprite-bubble {
+  max-width: 100%;
+  padding: 6px 10px;
+  overflow: hidden;
+  font-size: 0.78rem;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #f5f5f0;
+  color: #101413;
+  border-radius: 10px;
+}
+
+.sprite-body .pet,
+.sprite-body .pet-fallback {
+  width: 84px;
+  height: 84px;
+}
+
+.sprite-name {
+  font-size: 0.95rem;
+}
+
+.sprite-age {
+  font: 500 0.66rem/1.35 'DM Mono', monospace;
+  color: #9bb49e;
+  text-align: center;
+}
+
+.sprite.idle .sprite-body { animation: sprite-breathe 4s ease-in-out infinite; }
+.sprite.working .sprite-body { animation: sprite-busy 0.35s ease-in-out infinite; }
+.sprite.speaking .sprite-bubble { animation: sprite-pulse 0.9s ease-in-out infinite; }
+.sprite.error .sprite-body { animation: sprite-shake 0.4s linear infinite; filter: sepia(1) saturate(6) hue-rotate(-30deg); }
+.sprite.working .sprite-bubble { background: #ffd66b; }
+.sprite.working .sprite-bubble::before { content: '⚙ '; }
+.sprite.unobserved .sprite-body { filter: grayscale(1) opacity(0.5); }
+.sprite.unobserved .sprite-bubble { opacity: 0.5; }
+
+@keyframes sprite-breathe { 50% { transform: translateY(-4px) scale(1.03); } }
+@keyframes sprite-busy { 50% { transform: translateY(-8px) rotate(-3deg); } }
+@keyframes sprite-pulse { 50% { transform: scale(1.1); } }
+@keyframes sprite-shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sprite .sprite-body,
+  .sprite .sprite-bubble {
+    animation: none !important;
+  }
+}
