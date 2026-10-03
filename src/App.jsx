@@ -62,7 +62,8 @@ function Pet({ pet, botId, state }) {
   )
 }
 
-const PILL_STATES = ['speaking', 'working', 'idle', 'error', 'unobserved']
+// Stale (unobserved) bots read as Idle, so they share the idle pill instead of a duplicate one.
+const PILL_STATES = ['speaking', 'working', 'idle', 'error']
 
 function RoomTile({ room, onOpen }) {
   return (
@@ -75,7 +76,7 @@ function RoomTile({ room, onOpen }) {
       </span>
       <span className="room-pills">
         {PILL_STATES.map((state) => {
-          const count = room.bots.filter((b) => b.state === state).length
+          const count = room.bots.filter((b) => (b.state === 'unobserved' ? 'idle' : b.state) === state).length
           return count > 0 && <span key={state} className={`pill pill-${state}`}>{count} {stateCopy[state].label}</span>
         })}
       </span>
