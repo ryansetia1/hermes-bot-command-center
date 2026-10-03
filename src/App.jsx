@@ -13,7 +13,7 @@ const stateCopy = {
   working: { label: 'Working', description: 'Handling a task', tone: 'working' },
   speaking: { label: 'Speaking', description: 'Responding in room', tone: 'speaking' },
   error: { label: 'Error', description: 'Needs attention', tone: 'error' },
-  unobserved: { label: 'Unobserved', description: 'Lifecycle signal is stale', tone: 'unobserved' },
+  unobserved: { label: 'Idle', description: 'No recent signal', tone: 'unobserved' },
 }
 
 const STATE_PRIORITY = {
@@ -76,7 +76,7 @@ function RoomTile({ room, onOpen }) {
       <span className="room-pills">
         {PILL_STATES.map((state) => {
           const count = room.bots.filter((b) => b.state === state).length
-          return count > 0 && <span key={state} className={`pill pill-${state}`}>{count} {state}</span>
+          return count > 0 && <span key={state} className={`pill pill-${state}`}>{count} {stateCopy[state].label}</span>
         })}
       </span>
     </button>
@@ -338,9 +338,9 @@ export default function App() {
               type="button"
               className="btn-header-clean"
               onClick={handleClearAllUnobserved}
-              title="Clear all stale unobserved bots"
+              title="Clear all idle bots with no recent signal"
             >
-              Clear Stale ({unobservedBots})
+              Clear Idle ({unobservedBots})
             </button>
           )}
         </div>

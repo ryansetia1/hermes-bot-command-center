@@ -276,13 +276,12 @@ footer {
 .pet-fallback {
   width: 62px;
   height: 62px;
-  border-radius: 18px;
   object-fit: cover;
-  box-shadow: 0 8px 20px #00000055;
   flex-shrink: 0;
 }
 
 .pet-fallback {
+  border-radius: 18px;
   display: grid;
   place-items: center;
   background: #324439;
@@ -362,10 +361,6 @@ footer {
 .error .state-icon {
   color: #ff9b91;
   background: #5a302d;
-}
-
-.unobserved {
-  background: #2b2d29;
 }
 
 .unobserved .state-icon {
@@ -591,7 +586,7 @@ footer {
 .sprite.working .sprite-btn { animation: sprite-busy 0.35s ease-in-out infinite; }
 .sprite.speaking .sprite-btn { animation: sprite-pulse 0.9s ease-in-out infinite; }
 .sprite.error .sprite-btn { animation: sprite-shake 0.4s linear infinite; filter: sepia(1) saturate(6) hue-rotate(-30deg); }
-.sprite.unobserved .sprite-btn { filter: grayscale(1) opacity(0.5); }
+.sprite.unobserved .sprite-btn { opacity: 0.7; }
 
 @keyframes sprite-breathe { 50% { transform: translateY(-4px) scale(1.03); } }
 @keyframes sprite-busy { 50% { transform: translateY(-8px) rotate(-3deg); } }
@@ -621,7 +616,7 @@ footer {
   animation: pet-frames 0.9s steps(6) infinite;
 }
 
-.pet-sheet.pet-static { animation: none; filter: grayscale(1); }
+.pet-sheet.pet-static { animation: none; }
 .pet-probe { display: none; }
 
 @keyframes pet-frames { to { background-position-x: calc(var(--w) * -6); } }
