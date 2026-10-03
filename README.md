@@ -14,12 +14,18 @@ Collector memegang kontrak `presence.v1`: `hostId`, `roomId`, `botId`, `state`, 
 
 ## Jalankan
 
-Di terminal terpisah:
+Buka **dua Terminal macOS terpisah**. Salin hanya isi blok perintah di bawah—jangan salin heading atau kalimat penjelasan ke shell.
+
+Terminal pertama (collector):
 
 ```bash
-npm install
-npm run collector
-npm run dev
+cd "$HOME/Downloads/hermes-bot-command-center" && npm install && npm run collector
+```
+
+Terminal kedua (dashboard):
+
+```bash
+cd "$HOME/Downloads/hermes-bot-command-center" && npm run dev
 ```
 
 Vite mem-proxy `/presence` dan `/events` ke collector loopback pada port `8787`; dashboard mengambil snapshot awal lalu menerima pembaruan lewat SSE.
@@ -28,11 +34,19 @@ Vite mem-proxy `/presence` dan `/events` ke collector loopback pada port `8787`;
 
 Plugin memakai hook native `pre_gateway_dispatch`, `pre_llm_call`, `post_llm_call`, `pre_tool_call`, dan `post_tool_call`. `post_llm_call` dipetakan ke `llm:completed`/`idle`, bukan `speaking`, karena hook itu berjalan pada finalisasi turn; state `speaking` hanya boleh diterbitkan oleh hook streaming yang benar-benar tersedia. Ia mengirim event kecil ke collector melalui `PRESENCE_COLLECTOR_URL` (default `http://127.0.0.1:8787/observe`), tanpa menahan turn jika collector mati.
 
-Salin direktori plugin ke root plugin profil Hermes yang aktif, lalu validasi sebelum me-restart session Hermes:
+Salin direktori plugin ke root plugin profil Hermes yang aktif, lalu validasi sebelum me-restart session Hermes. Ganti `atlas` dengan profile target; jalankan blok ini sendiri di Terminal ketiga, tanpa menambahkan heading atau komentar:
 
 ```bash
-cp -R hermes_plugin/presence_publisher "$HERMES_HOME/plugins/"
+export HERMES_HOME="$HOME/.hermes/profiles/atlas"
+mkdir -p "$HERMES_HOME/plugins"
+cp -R "$HOME/Downloads/hermes-bot-command-center/hermes_plugin/presence_publisher" "$HERMES_HOME/plugins/"
 hermes plugins doctor "$HERMES_HOME/plugins/presence_publisher"
+```
+
+Setelah doctor menampilkan lima hook terdaftar, restart gateway dari **Terminal pengguna** (restart dapat mengganggu chat pada profile itu):
+
+```bash
+hermes gateway restart
 ```
 
 Jika `HERMES_HOME` tidak diekspor, gunakan root profil yang aktif (contoh profil Vega: `~/.hermes/profiles/vega`). Konfigurasi opsional: `PRESENCE_PORT`, `PRESENCE_TTL_MS`, `PRESENCE_HOST_ID`, `PRESENCE_ROOM_ID`, `PRESENCE_BOT_ID`, dan atribut pet `PRESENCE_PET_*`.
