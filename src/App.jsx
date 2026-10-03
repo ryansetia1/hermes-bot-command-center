@@ -23,6 +23,8 @@ function Pet({ pet, botId }) {
 
 export default function App() {
   const presence = usePresence()
+  if (!presence) return <main className="shell"><p className="kicker">CONNECTING TO LOCAL COLLECTOR</p><p className="intro">Waiting for presence telemetry…</p></main>
+  if (!presence.hostId) return <main className="shell"><p className="kicker">PRESENCE UNAVAILABLE</p><p className="intro">{presence.reason}</p></main>
   const status = stateCopy[presence.state]
 
   return <main className="shell">

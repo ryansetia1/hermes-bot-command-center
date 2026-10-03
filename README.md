@@ -1,26 +1,48 @@
 # Hermes Bot Command Center
 
-A local vertical slice for observing one Hermes bot via **presence.v1** telemetry.
+Local MVP untuk mengamati satu bot Hermes melalui telemetry **`presence.v1`**. Tidak ada scraping UI, heartbeat sintetis, central collector, atau multi-room routing.
 
-## What it proves
+## Arsitektur
 
-- A lifecycle-native publisher accepts gateway, LLM, and tool events—no UI scraping or fabricated heartbeats.
-- `presence.v1` carries `hostId`, `roomId`, `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, and an unobserved reason.
-- After the TTL expires, the publisher returns `unobserved`, never a misleading `idle` state.
-- The dashboard renders one profile-aware Bot Activity Card and falls back to bot initials if the versioned pet asset cannot load.
+```text
+Hermes native hooks → presence-publisher plugin → HTTP POST /observe
+                                             ↓
+Vite card ← SSE /events ← local collector ← TTL → unobserved
+```
 
-## Run
+Collector memegang kontrak `presence.v1`: `hostId`, `roomId`, `botId`, `state`, `activity`, `updatedAt`, `pet { slug, version, url }`, serta `reason` saat tidak teramati.
+
+## Jalankan
+
+Di terminal terpisah:
 
 ```bash
 npm install
+npm run collector
 npm run dev
 ```
 
-## Verify
+Vite mem-proxy `/presence` dan `/events` ke collector loopback pada port `8787`; dashboard mengambil snapshot awal lalu menerima pembaruan lewat SSE.
+
+## Hubungkan ke Hermes
+
+Plugin memakai hook native `pre_gateway_dispatch`, `pre_llm_call`, `post_llm_call`, `pre_tool_call`, dan `post_tool_call`. Ia mengirim event kecil ke collector melalui `PRESENCE_COLLECTOR_URL` (default `http://127.0.0.1:8787/observe`), tanpa menahan turn jika collector mati.
+
+Salin direktori plugin ke root plugin profil Hermes yang aktif, lalu validasi sebelum me-restart session Hermes:
+
+```bash
+cp -R hermes_plugin/presence_publisher "$HERMES_HOME/plugins/"
+hermes plugins doctor "$HERMES_HOME/plugins/presence_publisher"
+```
+
+Jika `HERMES_HOME` tidak diekspor, gunakan root profil yang aktif (contoh profil Vega: `~/.hermes/profiles/vega`). Konfigurasi opsional: `PRESENCE_PORT`, `PRESENCE_TTL_MS`, `PRESENCE_HOST_ID`, `PRESENCE_ROOM_ID`, `PRESENCE_BOT_ID`, dan atribut pet `PRESENCE_PET_*`.
+
+## Verifikasi
 
 ```bash
 npm test
+python3 -m unittest hermes_plugin.presence_publisher.test_publisher
 npm run build
 ```
 
-The current `createDefaultPublisher()` is a local adapter. A per-host publisher/central collector can replace that source without changing the card’s `presence.v1` contract.
+Test collector membuktikan event hook → `presence.v1` → SSE dan TTL menghasilkan `unobserved`; test plugin membuktikan mapping lima hook native ke event collector yang diizinkan.

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "collector": "node server/index.mjs",
     "build": "vite build",
     "test": "vitest run",
     "test:watch": "vitest"
