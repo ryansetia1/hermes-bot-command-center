@@ -448,6 +448,10 @@ footer {
   line-height: 1.65;
 }
 
+@media (hover: none) {
+  .sprite .btn-card-dismiss { opacity: 1; }
+}
+
 @media (max-width: 640px) {
   .shell {
     padding: 36px 0;
