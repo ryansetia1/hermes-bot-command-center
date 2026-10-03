@@ -109,7 +109,7 @@ function Sprite({ bot, spot, onDismiss, onSelect }) {
         aria-label={`${bot.botId}: ${status.label}`}
         onClick={() => onSelect?.(key)}
       >
-        <span className="sprite-body" style={position.flip ? { transform: 'scaleX(-1)' } : undefined}>
+        <span className={`sprite-body${position.flip ? ' flipped' : ''}`}>
           <Pet pet={bot.pet} botId={bot.botId} />
         </span>
       </button>

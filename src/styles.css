@@ -594,6 +594,12 @@ footer {
   display: block;
 }
 
+/* Facing direction flips the sprite image only, never the initials fallback text. */
+.sprite-body.flipped .pet,
+.sprite-body.flipped .pet-sheet {
+  transform: scaleX(-1);
+}
+
 .sprite .btn-card-dismiss {
   position: absolute;
   top: -10px;
