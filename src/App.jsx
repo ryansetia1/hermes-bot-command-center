@@ -183,13 +183,19 @@ function RoomScene({ roomId, roomName, bots, readMarks, onRead, onDismissBot, on
     if (openKey && openMessageAt) onRead(openKey, openMessageAt)
   }, [openKey, openMessageAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [returnFocusTo, setReturnFocusTo] = useState(null)
   const closeDialog = useCallback(() => {
-    setOpenKey((key) => {
-      requestAnimationFrame(() => floorRef.current?.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus())
-      return null
-    })
+    setOpenKey((key) => { setReturnFocusTo(key); return null })
   }, [])
+
   const displayName = roomName || (roomId === DIRECT_ROOM_ID ? '1o1 room' : roomId)
+
+  // After the dialog unmounts, hand focus back to the sprite that opened it.
+  useEffect(() => {
+    if (!returnFocusTo || openKey) return
+    floorRef.current?.querySelector(`[data-key="${CSS.escape(returnFocusTo)}"]`)?.focus()
+    setReturnFocusTo(null)
+  }, [returnFocusTo, openKey])
 
   return (
     <section className="room-scene" aria-labelledby={`room-title-${roomId}`}>
